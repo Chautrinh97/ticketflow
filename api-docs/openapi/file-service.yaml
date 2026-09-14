@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: TicketFlow — File Service API
+  description: >
+    Sinh presigned URL upload lên object storage. Service stateless, không sở hữu database.
+    Xem spec nghiệp vụ tại docs/02-domains/file-storage/spec.md.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+tags:
+  - name: files
+
+paths:
+  /files/presign:
+    post:
+      tags: [files]
+      summary: Sinh presigned URL để client upload trực tiếp lên object storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type]
+              properties:
+                file_name:
+                  type: string
+                content_type:
+                  type: string
+                  description: "Whitelist: image/jpeg, image/png, image/webp"
+                size_bytes:
+                  type: integer
+                  description: Kích thước file dự kiến, dùng để validate giới hạn trước khi cấp URL
+      responses:
+        "200":
+          description: Presigned URL được cấp
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                    format: uri
+                    description: URL PUT để client upload file trực tiếp lên object storage
+                  public_url:
+                    type: string
+                    format: uri
+                    description: URL công khai để lưu lại (vd events.banner_url) sau khi upload xong
+                  expires_in:
+                    type: integer
+                    description: Số giây hiệu lực của upload_url
+        "400":
+          description: content_type không nằm trong whitelist, hoặc size_bytes vượt giới hạn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+security:
+  - bearerAuth: []

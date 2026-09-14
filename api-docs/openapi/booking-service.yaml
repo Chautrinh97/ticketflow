@@ -1,0 +1,234 @@
+openapi: 3.0.3
+info:
+  title: TicketFlow — Booking Service API
+  description: >
+    Tạo đơn hàng, giữ chỗ, đảm bảo ACID khi trừ tồn kho vé.
+    Xem spec nghiệp vụ tại docs/02-domains/booking/spec.md — đặc biệt luồng
+    transaction + locking, đây là endpoint bị rate-limit chặt nhất trong hệ thống.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+tags:
+  - name: bookings
+
+paths:
+  /bookings:
+    post:
+      tags: [bookings]
+      summary: Tạo đơn hàng (đặt vé)
+      description: >
+        Rate limit riêng: 5 request/10 giây/user. Thực hiện trong 1 transaction
+        Postgres với SELECT ... FOR UPDATE trên ticket_types — xem docs/02-domains/booking/spec.md.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket_type_id, quantity]
+              properties:
+                ticket_type_id:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "201":
+          description: Đơn hàng được tạo (status=pending), chờ thanh toán trong expires_at
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "409":
+          description: Không đủ tồn kho (quota - sold_count < quantity)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Vượt rate limit đặt vé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bookings/{id}:
+    get:
+      tags: [bookings]
+      summary: Xem chi tiết đơn hàng — chỉ chủ đơn hàng hoặc super_admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chi tiết đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "403":
+          description: Không phải chủ đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Không tìm thấy đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bookings/{id}/cancel:
+    post:
+      tags: [bookings]
+      summary: Huỷ vé — chỉ chủ đơn hàng, trong thời hạn cho phép
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Đơn hàng đã huỷ, tồn kho được hoàn lại
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "403":
+          description: Không phải chủ đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Đã quá thời hạn cho phép huỷ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /users/me/bookings:
+    get:
+      tags: [bookings]
+      summary: Lịch sử đặt vé của user hiện tại
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Danh sách đơn hàng của user hiện tại
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Order"
+                  total:
+                    type: integer
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [pending, paid, cancelled, expired]
+    TicketStatus:
+      type: string
+      enum: [valid, used, cancelled]
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticket_type_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        unit_price:
+          type: number
+          format: double
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_item_id:
+          type: string
+          format: uuid
+        ticket_code:
+          type: string
+          description: Dùng để sinh mã QR check-in
+        status:
+          $ref: "#/components/schemas/TicketStatus"
+        issued_at:
+          type: string
+          format: date-time
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        total_amount:
+          type: number
+          format: double
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+          description: Chỉ có giá trị sau khi status=paid
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+security:
+  - bearerAuth: []

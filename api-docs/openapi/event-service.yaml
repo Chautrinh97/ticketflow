@@ -1,0 +1,397 @@
+openapi: 3.0.3
+info:
+  title: TicketFlow — Event Service API
+  description: >
+    CRUD sự kiện, loại vé, tìm kiếm cơ bản.
+    Xem spec nghiệp vụ tại docs/02-domains/event-catalog/spec.md.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+tags:
+  - name: public
+  - name: organizer
+
+paths:
+  /events:
+    get:
+      tags: [public]
+      summary: Danh sách sự kiện đã xuất bản (filter theo category/city/date)
+      security: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Chỉ lấy sự kiện có start_time từ thời điểm này
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Danh sách sự kiện
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventSummary"
+                  total:
+                    type: integer
+
+  /events/search:
+    get:
+      tags: [public]
+      summary: Full-text + fuzzy search theo tên/địa điểm
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Kết quả tìm kiếm, xếp hạng theo độ liên quan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventSummary"
+
+  /events/{slug}:
+    get:
+      tags: [public]
+      summary: Chi tiết sự kiện (bao gồm ticket_types và catalog linh hoạt)
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chi tiết sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "404":
+          description: Không tìm thấy sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /organizer/events:
+    post:
+      tags: [organizer]
+      summary: Tạo sự kiện mới (status='draft')
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventCreateInput"
+      responses:
+        "201":
+          description: Sự kiện được tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "403":
+          description: User hiện tại không có role organizer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /organizer/events/{id}:
+    put:
+      tags: [organizer]
+      summary: Cập nhật sự kiện — chỉ organizer sở hữu hoặc super_admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventUpdateInput"
+      responses:
+        "200":
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "403":
+          description: Không phải chủ sở hữu sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [organizer]
+      summary: Xoá (huỷ) sự kiện — chỉ organizer sở hữu hoặc super_admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Đã huỷ sự kiện (chuyển status='cancelled')
+        "403":
+          description: Không phải chủ sở hữu sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Sự kiện đã có đơn hàng paid, không thể xoá cứng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /organizer/events/{id}/publish:
+    post:
+      tags: [organizer]
+      summary: Xuất bản sự kiện (status draft → published)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Sự kiện đã published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+
+  /organizer/events/{id}/ticket-types:
+    post:
+      tags: [organizer]
+      summary: Thêm loại vé cho sự kiện — chỉ organizer sở hữu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketTypeCreateInput"
+      responses:
+        "201":
+          description: Loại vé được tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketType"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Category:
+      type: string
+      enum: [concert, workshop, sport]
+    EventStatus:
+      type: string
+      enum: [draft, published, cancelled]
+    TicketType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        currency:
+          type: string
+          default: VND
+        quota:
+          type: integer
+        sold_count:
+          type: integer
+    TicketTypeCreateInput:
+      type: object
+      required: [name, price, quota]
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        currency:
+          type: string
+          default: VND
+        quota:
+          type: integer
+          minimum: 1
+    EventSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        category:
+          $ref: "#/components/schemas/Category"
+        city:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        banner_url:
+          type: string
+          format: uri
+        min_price:
+          type: number
+          format: double
+    EventDetail:
+      allOf:
+        - $ref: "#/components/schemas/EventSummary"
+        - type: object
+          properties:
+            organizer_id:
+              type: string
+              format: uuid
+            venue_name:
+              type: string
+            address:
+              type: string
+            end_time:
+              type: string
+              format: date-time
+            description:
+              type: string
+            status:
+              $ref: "#/components/schemas/EventStatus"
+            ticket_types:
+              type: array
+              items:
+                $ref: "#/components/schemas/TicketType"
+            attributes:
+              type: object
+              description: Thuộc tính linh hoạt theo category, lưu ở MongoDB (xem docs/03-data/mongodb-schema.md)
+            tags:
+              type: array
+              items:
+                type: string
+    EventCreateInput:
+      type: object
+      required: [title, category, start_time]
+      properties:
+        title:
+          type: string
+        category:
+          $ref: "#/components/schemas/Category"
+        venue_name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        description:
+          type: string
+        attributes:
+          type: object
+        tags:
+          type: array
+          items:
+            type: string
+    EventUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+        venue_name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        banner_url:
+          type: string
+          format: uri
+        description:
+          type: string
+        attributes:
+          type: object
+        tags:
+          type: array
+          items:
+            type: string
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+security:
+  - bearerAuth: []

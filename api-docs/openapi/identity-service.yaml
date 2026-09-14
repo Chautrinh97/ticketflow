@@ -1,0 +1,273 @@
+openapi: 3.0.3
+info:
+  title: TicketFlow — Identity Service API
+  description: >
+    Đăng ký/đăng nhập, phát hành & thu hồi token, quản lý user & role.
+    Xem spec nghiệp vụ tại docs/02-domains/identity/spec.md.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: users
+  - name: admin
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Đổi Firebase ID token lấy JWT nội bộ
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firebase_id_token]
+              properties:
+                firebase_id_token:
+                  type: string
+      responses:
+        "200":
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                    description: Số giây tới khi access_token hết hạn
+                  user:
+                    $ref: "#/components/schemas/User"
+          headers:
+            Set-Cookie:
+              description: refresh_token (httpOnly, Secure, SameSite=Strict)
+              schema:
+                type: string
+        "401":
+          description: Firebase ID token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Cấp access token mới bằng refresh token (đọc từ cookie)
+      security: []
+      responses:
+        "200":
+          description: Access token mới được cấp, refresh token được rotate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  expires_in:
+                    type: integer
+        "401":
+          description: Refresh token không hợp lệ/đã bị thu hồi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Thu hồi refresh token, blacklist access token hiện tại
+      responses:
+        "204":
+          description: Logout thành công
+
+  /users/me:
+    get:
+      tags: [users]
+      summary: Lấy thông tin cá nhân
+      responses:
+        "200":
+          description: Thông tin user hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      tags: [users]
+      summary: Cập nhật thông tin cá nhân
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                avatar_url:
+                  type: string
+                  format: uri
+      responses:
+        "200":
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me/organizer-request:
+    post:
+      tags: [users]
+      summary: Đăng ký trở thành organizer (chờ super_admin duyệt)
+      description: Chuyển status của user hiện tại sang 'pending', giữ nguyên role cho tới khi được duyệt.
+      responses:
+        "202":
+          description: Yêu cầu đã được ghi nhận, chờ duyệt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: Đã có yêu cầu đang chờ duyệt, hoặc đã là organizer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: Danh sách user (filter, phân trang) — chỉ super_admin
+      parameters:
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/Role"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/UserStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Danh sách user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+                  total:
+                    type: integer
+        "403":
+          description: Không có quyền super_admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/users/{id}/role:
+    patch:
+      tags: [admin]
+      summary: Thay đổi role / khoá tài khoản — chỉ super_admin
+      description: Dùng để duyệt yêu cầu organizer (role='organizer', status='active') hoặc khoá tài khoản (status='banned').
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: "#/components/schemas/Role"
+                status:
+                  $ref: "#/components/schemas/UserStatus"
+      responses:
+        "200":
+          description: Cập nhật thành công, hành động được ghi vào audit_logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "403":
+          description: Không có quyền super_admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Không tìm thấy user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Role:
+      type: string
+      enum: [super_admin, organizer, user]
+    UserStatus:
+      type: string
+      enum: [active, pending, banned]
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+        role:
+          $ref: "#/components/schemas/Role"
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        created_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+security:
+  - bearerAuth: []

@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: TicketFlow — Payment Service API
+  description: >
+    Tích hợp cổng thanh toán, xử lý webhook.
+    Xem spec nghiệp vụ tại docs/02-domains/payment/spec.md.
+  version: "1.0.0"
+servers:
+  - url: /api/v1
+tags:
+  - name: payments
+
+paths:
+  /payments/{orderId}/checkout:
+    post:
+      tags: [payments]
+      summary: Khởi tạo phiên thanh toán cho một đơn hàng
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  description: "stripe | vnpay | momo... — provider mặc định nếu không truyền"
+      responses:
+        "200":
+          description: Phiên thanh toán được tạo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_id:
+                    type: string
+                    format: uuid
+                  checkout_url:
+                    type: string
+                    format: uri
+                    description: URL client redirect tới để hoàn tất thanh toán
+        "404":
+          description: Không tìm thấy đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Đơn hàng không ở trạng thái pending (đã thanh toán/đã huỷ)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /payments/webhook:
+    post:
+      tags: [payments]
+      summary: Callback xác nhận thanh toán từ payment gateway (idempotent)
+      description: >
+        Xác thực chữ ký HMAC từ payment gateway trước khi xử lý payload.
+        Idempotent theo provider_txn_id — xem docs/04-security/rate-limiting.md.
+      security: []
+      parameters:
+        - name: X-Signature
+          in: header
+          required: true
+          description: Chữ ký HMAC của payload, ký bởi payment gateway
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload nguyên văn từ payment gateway (shape phụ thuộc provider)
+              additionalProperties: true
+      responses:
+        "200":
+          description: Webhook đã được xử lý (hoặc đã xử lý trước đó — idempotent)
+        "401":
+          description: Chữ ký không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PaymentStatus:
+      type: string
+      enum: [initiated, success, failed]
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_txn_id:
+          type: string
+        amount:
+          type: number
+          format: double
+        status:
+          $ref: "#/components/schemas/PaymentStatus"
+        created_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+security:
+  - bearerAuth: []
