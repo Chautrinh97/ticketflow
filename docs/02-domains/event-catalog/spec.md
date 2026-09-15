@@ -29,7 +29,7 @@ Khi ghi `event_catalog.attributes`, Event Service validate shape tối thiểu t
 
 ### Sửa / xoá sự kiện
 
-`PUT/DELETE /organizer/events/:id` — chỉ organizer sở hữu (`event.organizer_id == current_user.id`) hoặc `super_admin` (xem [../../04-security/authorization.md](../../04-security/authorization.md)). Xoá sự kiện đã có đơn hàng `paid` liên kết nên bị chặn ở tầng nghiệp vụ (trả lỗi rõ ràng) thay vì xoá cứng gây mất dữ liệu giao dịch của Booking Service — cần hủy toàn bộ sự kiện thì chuyển `status='cancelled'` thay vì `DELETE` vật lý.
+`PATCH/DELETE /organizer/events/:id` — chỉ organizer sở hữu (`event.organizer_id == current_user.id`) hoặc `super_admin` (xem [../../04-security/authorization.md](../../04-security/authorization.md)). Xoá sự kiện đã có đơn hàng `paid` liên kết nên bị chặn ở tầng nghiệp vụ (trả lỗi rõ ràng) thay vì xoá cứng gây mất dữ liệu giao dịch của Booking Service — cần hủy toàn bộ sự kiện thì chuyển `status='cancelled'` thay vì `DELETE` vật lý.
 
 ### Tìm kiếm & liệt kê
 
@@ -51,7 +51,7 @@ Khi ghi `event_catalog.attributes`, Event Service validate shape tối thiểu t
 
 ## API liên quan
 
-Xem [../../../api-docs/openapi/event-service.yaml](../../../api-docs/openapi/event-service.yaml).
+Xem [../../../api-docs/openapi/event-service.yaml](../../../api-docs/openapi/event-service.yaml) — bao gồm cả `GET /organizer/events` (danh sách sự kiện của chính organizer, phục vụ màn hình [docs/06-frontend/screens/organizer/event-list.md](../../06-frontend/screens/organizer/event-list.md)) và `GET /organizer/events/{id}` (chi tiết 1 sự kiện theo id, phục vụ [docs/06-frontend/screens/organizer/event-manage.md](../../06-frontend/screens/organizer/event-manage.md) — ownership check giống hệt `PATCH/DELETE /organizer/events/{id}`).
 
 ## Phân theo phase
 

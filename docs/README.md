@@ -48,7 +48,11 @@ Mỗi domain map 1-1 với một service (trừ vài domain nice-to-have chưa t
 
 ## 06 — Frontend
 
-- [frontend-spec.md](06-frontend/frontend-spec.md)
+- [README.md](06-frontend/README.md) — tổng quan kỹ thuật, render mode, auth phía client
+- [design-system.md](06-frontend/design-system.md) — token màu/typography/spacing (theo thang Tailwind)
+- [interaction-patterns.md](06-frontend/interaction-patterns.md) — quy tắc hành vi dùng chung (loading, toast, modal, validate form...)
+- [components/](06-frontend/components/) — component dùng chung giữa các màn hình
+- [screens/](06-frontend/screens/) — đặc tả chi tiết từng màn hình
 
 ## 07 — Lộ trình triển khai
 

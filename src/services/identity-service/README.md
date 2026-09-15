@@ -1,6 +1,6 @@
 # Identity Service
 
-**Trạng thái:** chưa implement — placeholder scaffold.
+**Trạng thái:** Phase 1 (MVP) — đã implement: `POST /auth/login|refresh|logout`, `GET/PATCH /users/me`, gRPC `CheckSession` (dùng bởi API Gateway). Firebase mặc định chạy ở chế độ mock (`AUTH_FIREBASE_MODE=mock`) để chạy được mà không cần project Firebase thật. Refresh-token rotation lưu ở Redis (`refresh:{token}`, không có bảng riêng — xem docs/03-data/redis-keys.md). Chưa implement: duyệt organizer, RBAC đầy đủ, audit log (Phase 2).
 
 Đăng ký/đăng nhập, phát JWT, quản lý user & role. Database: PostgreSQL (`users`).
 

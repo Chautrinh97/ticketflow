@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package ticketflow.event;
+
+option go_package = "ticketflow/proto/eventpb;eventpb";
+
+// EventService exposes internal-only RPCs consumed by other services.
+// The public contract lives in api-docs/openapi/event-service.yaml.
+service EventService {
+  // GetEvent is called by booking-service to (a) verify the event owning a
+  // ticket_type is 'published' before allowing a booking against it, and
+  // (b) (Phase 2+) resolve organizer ownership for the buyers endpoint.
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse);
+}
+
+message GetEventRequest {
+  string event_id = 1;
+}
+
+message GetEventResponse {
+  string id = 1;
+  string organizer_id = 2;
+  // draft | published | cancelled — mirrors events.status
+  string status = 3;
+  string title = 4;
+  string start_time = 5; // RFC3339
+}

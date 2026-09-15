@@ -11,11 +11,11 @@
 | [booking](../02-domains/booking/spec.md) | `POST /bookings` với transaction ACID (`SELECT ... FOR UPDATE`) — đây là phần **bắt buộc làm đúng ngay từ đầu**, không phải phần có thể làm tạm rồi sửa sau |
 | [payment](../02-domains/payment/spec.md) | Có thể mock/giả lập cổng thanh toán (endpoint nội bộ tự đánh dấu thành công) thay vì tích hợp gateway thật — miễn luồng `orders.status: pending → paid` hoạt động đúng |
 | [notification](../02-domains/notification/spec.md) | Chưa cần — có thể hoãn sang Phase 2 |
-| [file-storage](../02-domains/file-storage/spec.md) | Chưa cần — banner sự kiện có thể dùng URL nhập tay |
+| [file-storage](../02-domains/file-storage/spec.md) | Chưa cần — sự kiện Phase 1 không có banner (không có cả field nhập URL thủ công) |
 
 ## Frontend
 
-Next.js: trang danh sách sự kiện, chi tiết sự kiện, luồng đặt vé cơ bản (CSR, có auth). Chưa cần dashboard organizer/admin đầy đủ.
+Next.js: trang chủ, tìm kiếm sự kiện (lọc cơ bản), chi tiết sự kiện, đăng nhập, luồng đặt vé (chọn nhiều loại vé/1 đơn, xác nhận đơn hàng), vé của tôi + chi tiết vé, hồ sơ cá nhân, tạo sự kiện cơ bản cho organizer, quản lý sự kiện cơ bản (xem + thêm loại vé + xuất bản). Chưa cần dashboard organizer/admin đầy đủ.
 
 ## API & docs
 

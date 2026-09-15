@@ -1,6 +1,6 @@
 # Payment Service
 
-**Trạng thái:** chưa implement — placeholder scaffold.
+**Trạng thái:** Phase 1 (MVP) — đã implement: `POST /payments/:orderId/checkout` (mock — xác nhận thành công ngay trong request, gọi gRPC `ConfirmOrderPayment` sang Booking Service), `POST /payments/webhook` (pass-through mỏng, chưa xác thực chữ ký — dùng để test thủ công luồng thất bại). Không có gRPC server riêng (không service nào gọi payment-service qua gRPC ở Phase 1). Chưa implement: tích hợp cổng thanh toán thật, xác thực chữ ký HMAC + idempotent theo `provider_txn_id` (Phase 2).
 
 Tích hợp cổng thanh toán, xử lý webhook. Database: PostgreSQL (`payments`).
 

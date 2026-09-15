@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package ticketflow.booking;
+
+option go_package = "ticketflow/proto/bookingpb;bookingpb";
+
+// BookingService exposes internal-only RPCs consumed by payment-service.
+// The public contract lives in api-docs/openapi/booking-service.yaml.
+service BookingService {
+  // GetOrder lets payment-service validate an order exists/is pending and
+  // read its amount before starting a checkout session.
+  rpc GetOrder(GetOrderRequest) returns (OrderSummary);
+
+  // ConfirmOrderPayment is called by payment-service after a (mocked, in
+  // Phase 1) successful payment. booking-service transitions
+  // orders.status pending->paid and generates tickets in its own transaction.
+  rpc ConfirmOrderPayment(ConfirmOrderPaymentRequest) returns (ConfirmOrderPaymentResponse);
+
+  // FailOrderPayment runs the compensating transaction: restores sold_count
+  // and transitions orders.status to cancelled.
+  rpc FailOrderPayment(FailOrderPaymentRequest) returns (OrderSummary);
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message OrderSummary {
+  string id = 1;
+  string user_id = 2;
+  // pending | paid | cancelled | expired
+  string status = 3;
+  double total_amount = 4;
+}
+
+message ConfirmOrderPaymentRequest {
+  string order_id = 1;
+  string payment_id = 2;
+}
+
+message TicketSummary {
+  string id = 1;
+  string ticket_code = 2;
+}
+
+message ConfirmOrderPaymentResponse {
+  string order_status = 1;
+  repeated TicketSummary tickets = 2;
+}
+
+message FailOrderPaymentRequest {
+  string order_id = 1;
+  string payment_id = 2;
+  string reason = 3;
+}

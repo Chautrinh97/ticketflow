@@ -10,6 +10,8 @@ servers:
   - url: /api/v1
 tags:
   - name: bookings
+  - name: organizer
+  - name: admin
 
 paths:
   /bookings:
@@ -17,22 +19,33 @@ paths:
       tags: [bookings]
       summary: Tạo đơn hàng (đặt vé)
       description: >
-        Rate limit riêng: 5 request/10 giây/user. Thực hiện trong 1 transaction
-        Postgres với SELECT ... FOR UPDATE trên ticket_types — xem docs/02-domains/booking/spec.md.
+        Rate limit riêng: 5 request/10 giây/user (áp dụng từ Phase 2 — xem
+        docs/02-domains/booking/spec.md). Nhận một hoặc nhiều dòng loại vé
+        trong 1 đơn hàng (vd: 2 VIP + 3 Standard); thực hiện trong 1
+        transaction Postgres duy nhất, khoá tất cả ticket_types liên quan
+        (SELECT ... FOR UPDATE, theo thứ tự id để tránh deadlock) — tất cả
+        hoặc không dòng nào được đặt (all-or-nothing).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ticket_type_id, quantity]
+              required: [items]
               properties:
-                ticket_type_id:
-                  type: string
-                  format: uuid
-                quantity:
-                  type: integer
-                  minimum: 1
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [ticket_type_id, quantity]
+                    properties:
+                      ticket_type_id:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                        minimum: 1
       responses:
         "201":
           description: Đơn hàng được tạo (status=pending), chờ thanh toán trong expires_at
@@ -124,30 +137,101 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/OrderStatus"
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            default: 20
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
           description: Danh sách đơn hàng của user hiện tại
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Order"
-                  total:
-                    type: integer
+                $ref: "#/components/schemas/OrderListResponse"
+
+  /organizer/events/{eventId}/buyers:
+    get:
+      tags: [organizer]
+      summary: Danh sách người mua vé của 1 sự kiện — chỉ organizer sở hữu sự kiện đó
+      description: >
+        Ownership được xác thực bằng cách gọi gRPC nội bộ sang Event Service để kiểm tra
+        event.organizer_id == current_user.id trước khi truy vấn orders/tickets —
+        xem docs/04-security/authorization.md.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Danh sách người mua vé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerListResponse"
+        "403":
+          description: Không phải chủ sở hữu sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /organizer/stats:
+    get:
+      tags: [organizer]
+      summary: Tổng quan doanh thu/tỉ lệ bán vé của organizer hiện tại (mọi sự kiện)
+      responses:
+        "200":
+          description: Số liệu tổng quan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizerStats"
+
+  /organizer/events/{id}/stats:
+    get:
+      tags: [organizer]
+      summary: Thống kê doanh thu/tỉ lệ bán vé của 1 sự kiện — chỉ organizer sở hữu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Số liệu thống kê sự kiện, kèm chi tiết theo từng loại vé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventStats"
+        "403":
+          description: Không phải chủ sở hữu sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /admin/stats:
+    get:
+      tags: [admin]
+      summary: Thống kê toàn hệ thống — chỉ super_admin
+      responses:
+        "200":
+          description: Số liệu tổng quan toàn hệ thống
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "403":
+          description: Không có quyền super_admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
 components:
   securitySchemes:
@@ -155,7 +239,101 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
   schemas:
+    Buyer:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        ticket_type_name:
+          type: string
+        quantity:
+          type: integer
+        order_status:
+          $ref: "#/components/schemas/OrderStatus"
+        created_at:
+          type: string
+          format: date-time
+    OrganizerStats:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+          format: double
+        total_tickets_sold:
+          type: integer
+        published_events_count:
+          type: integer
+        average_sell_through_rate:
+          type: number
+          format: double
+          description: "Tỉ lệ bán vé trung bình các sự kiện đang published, 0.0–1.0"
+    EventStats:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        total_revenue:
+          type: number
+          format: double
+        total_tickets_sold:
+          type: integer
+        sell_through_rate:
+          type: number
+          format: double
+        by_ticket_type:
+          type: array
+          items:
+            type: object
+            properties:
+              ticket_type_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              sold_count:
+                type: integer
+              revenue:
+                type: number
+                format: double
+    AdminStats:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+          format: double
+        total_orders:
+          type: integer
+        total_users:
+          type: integer
+        total_organizers:
+          type: integer
     OrderStatus:
       type: string
       enum: [pending, paid, cancelled, expired]
@@ -229,6 +407,24 @@ components:
           type: string
         message:
           type: string
+    OrderListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+    BuyerListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Buyer"
+        total:
+          type: integer
 
 security:
   - bearerAuth: []

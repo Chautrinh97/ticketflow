@@ -19,6 +19,8 @@ Bảng `users` — định nghĩa đầy đủ tại [../../03-data/postgres-sch
 3. Nếu `firebase_uid` chưa tồn tại trong `users`: tạo user mới với `role='user'`, `status='active'`. Nếu đã tồn tại: tra thông tin hiện có.
 4. Phát `access_token` (JWT 15 phút) + `refresh_token` (cookie httpOnly 7 ngày).
 
+Ở môi trường non-production, Identity Service có thể chạy với một mock Firebase verifier (cấu hình qua biến môi trường, không cần Firebase project thật) — verifier này chấp nhận một token tự tạo cục bộ thay cho Firebase ID token thật ở bước 2, nhưng vẫn phát hành `access_token`/`refresh_token` theo đúng hợp đồng như trên.
+
 Chi tiết đầy đủ về token, claim, rotation, blacklist xem [../../04-security/authentication.md](../../04-security/authentication.md).
 
 ### Đăng ký trở thành organizer

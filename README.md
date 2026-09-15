@@ -10,7 +10,7 @@ TicketFlow cho phép các đơn vị tổ chức (organizer) đăng sự kiện 
 
 ## Trạng thái hiện tại
 
-Repo đang ở giai đoạn **pre-implementation**: toàn bộ khung sườn thư mục, tài liệu thiết kế (spec theo domain), và hợp đồng API (OpenAPI) đã được dựng sẵn. Chưa có code triển khai trong `src/`. Việc code hoá sẽ đi theo lộ trình 4 phase mô tả tại [docs/07-roadmap/phases-overview.md](docs/07-roadmap/phases-overview.md).
+**Phase 1 (MVP) đã implement** — xem [docs/07-roadmap/phase-1-mvp.md](docs/07-roadmap/phase-1-mvp.md): 4 backend service Go (identity, event, booking, payment) + API Gateway, chạy được end-to-end bằng `docker-compose` (đăng nhập → xem sự kiện → đặt vé nhiều loại vé/1 đơn với transaction ACID chống bán trùng → thanh toán mock → vé được phát hành), cùng frontend Next.js cho 12 màn hình cơ bản. Chi tiết cách chạy: [deployments/README.md](deployments/README.md). Các phase sau (RBAC đầy đủ, search, hạ tầng Kubernetes, event-driven...) xem [docs/07-roadmap/phases-overview.md](docs/07-roadmap/phases-overview.md).
 
 ## Bắt đầu từ đâu
 
@@ -24,7 +24,8 @@ Repo đang ở giai đoạn **pre-implementation**: toàn bộ khung sườn th�
 | Thiết kế dữ liệu (Postgres/Mongo/Redis) | [docs/03-data/](docs/03-data/) |
 | Bảo mật, auth, rate limit | [docs/04-security/](docs/04-security/) |
 | Hạ tầng, DevOps, cron job | [docs/05-infra-devops/](docs/05-infra-devops/) |
-| Frontend | [docs/06-frontend/frontend-spec.md](docs/06-frontend/frontend-spec.md) |
+| Frontend (tổng quan, render mode) | [docs/06-frontend/README.md](docs/06-frontend/README.md) |
+| Spec chi tiết từng màn hình UI + component dùng chung | [docs/06-frontend/screens/](docs/06-frontend/screens/), [docs/06-frontend/components/](docs/06-frontend/components/) |
 | Lộ trình triển khai theo phase | [docs/07-roadmap/](docs/07-roadmap/) |
 | Hợp đồng API (OpenAPI) | [api-docs/](api-docs/) |
 | Cấu trúc thư mục source code | [src/](src/) |
@@ -35,7 +36,7 @@ Repo đang ở giai đoạn **pre-implementation**: toàn bộ khung sườn th�
 .
 ├── docs/           # Tài liệu spec: overview, kiến trúc, domain, data, security, infra, frontend, roadmap
 ├── api-docs/       # Hợp đồng API (OpenAPI 3.0) cho từng service
-├── src/            # Source code (services Go, frontend Next.js, proto dùng chung) — chưa có implementation
+├── src/            # Source code (services Go, frontend Next.js, proto dùng chung) — Phase 1 (MVP) đã implement
 ├── deployments/    # Docker Compose, Kubernetes manifests, Helm chart
 ├── scripts/        # Script tiện ích cho dev/CI
 ├── .claude/        # Cấu hình Claude Code cho repo này

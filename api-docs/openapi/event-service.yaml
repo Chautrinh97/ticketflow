@@ -32,35 +32,20 @@ paths:
           schema:
             type: string
             format: date-time
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            default: 20
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
           description: Danh sách sự kiện
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/EventSummary"
-                  total:
-                    type: integer
+                $ref: "#/components/schemas/EventSummaryListResponse"
 
   /events/search:
     get:
       tags: [public]
-      summary: Full-text + fuzzy search theo tên/địa điểm
+      summary: Full-text + fuzzy search theo tên/địa điểm, xếp hạng theo độ liên quan
       security: []
       parameters:
         - name: q
@@ -68,18 +53,15 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
-          description: Kết quả tìm kiếm, xếp hạng theo độ liên quan
+          description: Kết quả tìm kiếm
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/EventSummary"
+                $ref: "#/components/schemas/EventSummaryListResponse"
 
   /events/{slug}:
     get:
@@ -107,6 +89,29 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /organizer/events:
+    get:
+      tags: [organizer]
+      summary: Danh sách sự kiện của chính organizer hiện tại
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/EventStatus"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Danh sách sự kiện của organizer hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSummaryListResponse"
+        "403":
+          description: User hiện tại không có role organizer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     post:
       tags: [organizer]
       summary: Tạo sự kiện mới (status='draft')
@@ -131,9 +136,45 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /organizer/events/{id}:
-    put:
+    get:
       tags: [organizer]
-      summary: Cập nhật sự kiện — chỉ organizer sở hữu hoặc super_admin
+      summary: Chi tiết 1 sự kiện của chính organizer hiện tại — chỉ organizer sở hữu hoặc super_admin
+      description: >
+        Phục vụ màn hình quản lý sự kiện (event-manage.md) tải lại chi tiết
+        1 sự kiện theo id — xem docs/02-domains/event-catalog/spec.md.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chi tiết sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "403":
+          description: Không phải chủ sở hữu sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Không tìm thấy sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [organizer]
+      summary: Cập nhật một phần thông tin sự kiện — chỉ organizer sở hữu hoặc super_admin
+      description: >
+        Chỉ các field có mặt trong request body được cập nhật; field vắng mặt
+        giữ nguyên giá trị hiện có (partial update — toàn bộ field của
+        EventUpdateInput đều optional).
       parameters:
         - name: id
           in: path
@@ -236,6 +277,22 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
   schemas:
     Category:
       type: string
@@ -392,6 +449,15 @@ components:
           type: string
         message:
           type: string
+    EventSummaryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSummary"
+        total:
+          type: integer
 
 security:
   - bearerAuth: []

@@ -1,0 +1,233 @@
+name: ticketflow
+
+# Phase 1 (MVP) — chạy toàn bộ hệ thống ở local, xem docs/07-roadmap/phase-1-mvp.md.
+# 1 Postgres database duy nhất dùng chung cho identity/event/booking/payment
+# (xem docs/03-data/postgres-schema.md và docs/01-architecture/repo-structure.md) —
+# mỗi service chạy migration riêng vào cùng DB nhưng dùng bảng theo dõi
+# version khác nhau (x-migrations-table) để không đụng nhau, và migration
+# chạy tuần tự theo đúng thứ tự phụ thuộc khoá ngoại: identity -> event ->
+# booking -> payment.
+
+x-postgres-dsn: &postgres-dsn postgres://${POSTGRES_USER:-ticketflow}:${POSTGRES_PASSWORD:-ticketflow}@postgres:5432/${POSTGRES_DB:-ticketflow}?sslmode=disable
+x-jwt-secret: &jwt-secret ${JWT_SIGNING_KEY:-dev-secret-change-me}
+
+# Every Go service listens on the same container-internal ports — each is
+# its own container with its own network namespace, so the port number
+# carries no identity; only the Compose service name does (identity-service,
+# event-service, ...). Only api-gateway's HOST-side mapping below needs a
+# stable, well-known value (8080); its container-internal port is this same
+# uniform value like everything else. See src/services/*/internal/config/config.go.
+x-http-port: &http-port "18080"
+x-grpc-port: &grpc-port "18443"
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ticketflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ticketflow}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketflow}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ticketflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ticketflow-net]
+
+  mongo:
+    image: mongo:6
+    volumes:
+      - mongodata:/data/db
+    ports:
+      - "27017:27017"
+    networks: [ticketflow-net]
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks: [ticketflow-net]
+
+  # --- migrations, run once each, in FK-dependency order ---
+
+  migrate-identity:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../src/services/identity-service/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${POSTGRES_USER:-ticketflow}:${POSTGRES_PASSWORD:-ticketflow}@postgres:5432/${POSTGRES_DB:-ticketflow}?sslmode=disable&x-migrations-table=identity_schema_migrations", "up"]
+    networks: [ticketflow-net]
+
+  migrate-event:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      migrate-identity:
+        condition: service_completed_successfully
+    volumes:
+      - ../src/services/event-service/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${POSTGRES_USER:-ticketflow}:${POSTGRES_PASSWORD:-ticketflow}@postgres:5432/${POSTGRES_DB:-ticketflow}?sslmode=disable&x-migrations-table=event_schema_migrations", "up"]
+    networks: [ticketflow-net]
+
+  migrate-booking:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      migrate-event:
+        condition: service_completed_successfully
+    volumes:
+      - ../src/services/booking-service/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${POSTGRES_USER:-ticketflow}:${POSTGRES_PASSWORD:-ticketflow}@postgres:5432/${POSTGRES_DB:-ticketflow}?sslmode=disable&x-migrations-table=booking_schema_migrations", "up"]
+    networks: [ticketflow-net]
+
+  migrate-payment:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      migrate-booking:
+        condition: service_completed_successfully
+    volumes:
+      - ../src/services/payment-service/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${POSTGRES_USER:-ticketflow}:${POSTGRES_PASSWORD:-ticketflow}@postgres:5432/${POSTGRES_DB:-ticketflow}?sslmode=disable&x-migrations-table=payment_schema_migrations", "up"]
+    networks: [ticketflow-net]
+
+  # --- application services ---
+
+  identity-service:
+    build:
+      context: ../src
+      dockerfile: services/identity-service/Dockerfile
+    depends_on:
+      migrate-payment:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    environment:
+      HTTP_PORT: *http-port
+      GRPC_PORT: *grpc-port
+      DATABASE_URL: *postgres-dsn
+      REDIS_ADDR: redis:6379
+      JWT_SIGNING_KEY: *jwt-secret
+      AUTH_FIREBASE_MODE: ${AUTH_FIREBASE_MODE:-mock}
+      FIREBASE_CREDENTIALS_FILE: ${FIREBASE_CREDENTIALS_FILE:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    # No host port publishing — reachable only from other containers on
+    # ticketflow-net (by service name) and, for debugging, via `docker
+    # compose exec`/`docker compose logs`. Go through api-gateway (:8080)
+    # for anything client-facing.
+    networks: [ticketflow-net]
+
+  event-service:
+    build:
+      context: ../src
+      dockerfile: services/event-service/Dockerfile
+    depends_on:
+      migrate-payment:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_started
+    environment:
+      HTTP_PORT: *http-port
+      GRPC_PORT: *grpc-port
+      DATABASE_URL: *postgres-dsn
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-ticketflow}
+      JWT_SIGNING_KEY: *jwt-secret
+    networks: [ticketflow-net]
+
+  booking-service:
+    build:
+      context: ../src
+      dockerfile: services/booking-service/Dockerfile
+    depends_on:
+      migrate-payment:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      event-service:
+        condition: service_started
+    environment:
+      HTTP_PORT: *http-port
+      GRPC_PORT: *grpc-port
+      DATABASE_URL: *postgres-dsn
+      REDIS_ADDR: redis:6379
+      JWT_SIGNING_KEY: *jwt-secret
+      EVENT_GRPC_ADDR: event-service:18443
+    networks: [ticketflow-net]
+
+  payment-service:
+    build:
+      context: ../src
+      dockerfile: services/payment-service/Dockerfile
+    depends_on:
+      migrate-payment:
+        condition: service_completed_successfully
+      booking-service:
+        condition: service_started
+    environment:
+      HTTP_PORT: *http-port
+      DATABASE_URL: *postgres-dsn
+      JWT_SIGNING_KEY: *jwt-secret
+      BOOKING_GRPC_ADDR: booking-service:18443
+    networks: [ticketflow-net]
+
+  api-gateway:
+    build:
+      context: ../src
+      dockerfile: services/api-gateway/Dockerfile
+    depends_on:
+      identity-service:
+        condition: service_started
+      event-service:
+        condition: service_started
+      booking-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    environment:
+      HTTP_PORT: *http-port
+      JWT_SIGNING_KEY: *jwt-secret
+      IDENTITY_GRPC_ADDR: identity-service:18443
+      IDENTITY_HTTP_URL: http://identity-service:18080
+      EVENT_HTTP_URL: http://event-service:18080
+      BOOKING_HTTP_URL: http://booking-service:18080
+      PAYMENT_HTTP_URL: http://payment-service:18080
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:3000}
+    ports:
+      # Host side stays on the well-known 8080; container side is the same
+      # uniform internal port as every other service.
+      - "8080:18080"
+    networks: [ticketflow-net]
+
+  frontend:
+    build:
+      context: ../src/frontend/nextjs-app
+      # NEXT_PUBLIC_* vars are baked into the client (browser) bundle at
+      # build time — must be a build arg, not `environment:`. The browser
+      # reaches the gateway via the host-published port.
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080/api/v1}
+    environment:
+      # Plain (non-public) env var, read at runtime by the Node server for
+      # its own RSC/SSR fetches — those run inside this container, so they
+      # must use the compose network's service name and api-gateway's
+      # container-internal port (not localhost, and not the host-mapped
+      # 8080 — container-to-container traffic bypasses that mapping
+      # entirely). See lib/api/client.ts.
+      API_BASE_URL_INTERNAL: http://api-gateway:18080/api/v1
+    depends_on:
+      api-gateway:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    networks: [ticketflow-net]
+
+networks:
+  ticketflow-net: {}
+
+volumes:
+  pgdata: {}
+  mongodata: {}

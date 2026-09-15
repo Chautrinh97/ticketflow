@@ -8,7 +8,7 @@
 4. Backend phát cặp token nội bộ:
    - **`access_token`** (JWT, hạn 15 phút) — gửi qua header `Authorization: Bearer <token>`.
    - **`refresh_token`** (hạn 7 ngày) — lưu trong cookie `httpOnly + Secure + SameSite=Strict`, không bao giờ gửi qua response body hay lưu ở localStorage.
-5. `POST /auth/refresh` dùng refresh token trong cookie để cấp access token mới. Áp dụng **refresh token rotation**: mỗi lần refresh sẽ cấp refresh token mới và vô hiệu hoá refresh token cũ (ghi lại trong bảng quản lý refresh token phía Identity Service, hoặc đánh dấu revoked) — nếu một refresh token cũ bị dùng lại (dấu hiệu bị đánh cắp), coi như phiên đó bị compromise và thu hồi toàn bộ token của user.
+5. `POST /auth/refresh` dùng refresh token trong cookie để cấp access token mới. Áp dụng **refresh token rotation**: refresh token là giá trị ngẫu nhiên dùng trực tiếp làm khoá Redis `refresh:{token}` (giá trị là `user_id`, TTL 7 ngày — xem [../03-data/redis-keys.md](../03-data/redis-keys.md)); mỗi lần refresh, token cũ bị xoá ngay khi đọc (get-then-delete) và một token mới được cấp — nếu cùng một refresh token cũ bị dùng lại lần 2 sẽ không tìm thấy key (đã bị xoá), coi như refresh thất bại.
 6. **Logout**: xoá cookie refresh token phía client + đưa `jti` (JWT ID) của access token hiện tại vào `session:blacklist:{jti}` trên Redis cho tới khi access token hết hạn tự nhiên (xem [../03-data/redis-keys.md](../03-data/redis-keys.md)).
 
 ## Vì sao không dùng thẳng Firebase ID token cho toàn bộ hệ thống

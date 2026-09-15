@@ -13,8 +13,9 @@ Cung cấp số liệu thống kê cho hai đối tượng:
 
 Không cần service riêng — thống kê được tính bằng query tổng hợp (`SUM`, `COUNT`, `GROUP BY`) trực tiếp trên dữ liệu `orders`/`order_items`/`tickets` (thuộc Booking Service) và `events`/`ticket_types` (thuộc Event Service). Vì đây là truy vấn xuyên domain, nơi thực thi hợp lý là ở tầng gọi tổng hợp qua gRPC (Booking Service expose một RPC nội bộ trả về số liệu thô cho Event Service hoặc cho API Gateway tổng hợp), **không** cho một service query thẳng vào database của service khác.
 
-- `GET /organizer/events/:id/stats` (thuộc phạm vi Event/Booking Service, path cụ thể xác định khi implement) — trả doanh thu, số vé đã bán/còn lại theo từng `ticket_type`. Yêu cầu ownership check giống mọi endpoint organizer khác (xem [../../04-security/authorization.md](../../04-security/authorization.md)).
-- `GET /admin/stats` — chỉ `super_admin`, số liệu toàn hệ thống.
+- `GET /organizer/stats` (Booking Service — xem [../../../api-docs/openapi/booking-service.yaml](../../../api-docs/openapi/booking-service.yaml)) — tổng quan doanh thu/tỉ lệ bán vé của organizer hiện tại trên mọi sự kiện.
+- `GET /organizer/events/:id/stats` (Booking Service) — doanh thu, số vé đã bán/còn lại theo từng `ticket_type` của 1 sự kiện. Yêu cầu ownership check giống mọi endpoint organizer khác (xem [../../04-security/authorization.md](../../04-security/authorization.md)).
+- `GET /admin/stats` (Booking Service) — chỉ `super_admin`, số liệu toàn hệ thống.
 - **Báo cáo doanh thu ngày**: cron job 0h hằng ngày tổng hợp doanh thu theo organizer, lưu snapshot (bảng snapshot riêng, chưa định nghĩa schema chi tiết ở giai đoạn scaffold — xác định khi implement Phase 2) — xem [../../05-infra-devops/background-jobs.md](../../05-infra-devops/background-jobs.md). Mục đích snapshot: tránh phải quét lại toàn bộ `orders` mỗi lần muốn xem lịch sử doanh thu theo ngày.
 
 ## Giai đoạn Phase 4 — Analytics Service riêng (nice-to-have)

@@ -27,9 +27,10 @@ func RequireOwnership(resourceLookup func(ctx *gin.Context) (ownerID string, err
 | Nhóm endpoint | Role yêu cầu | Kiểm tra ownership? |
 |---|---|---|
 | `POST /organizer/events` | `organizer` | Không (resource chưa tồn tại — owner = user hiện tại) |
-| `PUT/DELETE /organizer/events/:id` | `organizer` (hoặc `super_admin`) | Có — `event.organizer_id == current_user.id`, bỏ qua nếu `super_admin` |
+| `PATCH/DELETE /organizer/events/:id` | `organizer` (hoặc `super_admin`) | Có — `event.organizer_id == current_user.id`, bỏ qua nếu `super_admin` |
 | `POST /bookings/:id/cancel` | `user` (chủ đơn) hoặc `super_admin` | Có — `order.user_id == current_user.id`, bỏ qua nếu `super_admin` |
-| `GET /admin/users`, `PATCH /admin/users/:id/role` | `super_admin` | Không áp dụng (không có khái niệm "chủ sở hữu" user khác) |
+| `GET /organizer/events`, `GET /organizer/events/{eventId}/buyers`, `GET /organizer/stats`, `GET /organizer/events/{id}/stats` | `organizer` | Có với các endpoint theo 1 sự kiện cụ thể (`buyers`, `events/{id}/stats`) — `event.organizer_id == current_user.id`; các endpoint tổng hợp (`GET /organizer/events`, `GET /organizer/stats`) tự giới hạn theo `current_user.id`, không cần tham số ownership riêng |
+| `GET /admin/users`, `PATCH /admin/users/:id/role`, `GET /admin/stats`, `GET /admin/audit-logs` | `super_admin` | Không áp dụng (không có khái niệm "chủ sở hữu" cho dữ liệu toàn hệ thống) |
 
 ## Audit log
 

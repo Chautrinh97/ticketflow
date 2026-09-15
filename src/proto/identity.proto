@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package ticketflow.identity;
+
+option go_package = "ticketflow/proto/identitypb;identitypb";
+
+// IdentityService exposes internal-only RPCs consumed by other services.
+// The public contract lives in api-docs/openapi/identity-service.yaml and is
+// served by identity-service's own REST API — this proto is NOT a mirror
+// of that contract, only what other services need internally.
+service IdentityService {
+  // CheckSession is called by the API Gateway's auth middleware on every
+  // authenticated request, since the gateway owns no Postgres/Redis
+  // business state itself (see docs/03-data/redis-keys.md session:blacklist
+  // and users.status live-ban check in docs/04-security/authentication.md).
+  rpc CheckSession(CheckSessionRequest) returns (CheckSessionResponse);
+}
+
+message CheckSessionRequest {
+  string jti = 1;
+  string user_id = 2;
+}
+
+message CheckSessionResponse {
+  bool blacklisted = 1;
+  // active | pending | banned — mirrors users.status in postgres-schema.md
+  string user_status = 2;
+}

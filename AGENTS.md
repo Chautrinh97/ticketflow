@@ -4,7 +4,7 @@ Tài liệu này áp dụng cho mọi AI coding agent (Claude Code, Cursor, Copi
 
 ## Trạng thái repo
 
-Repo đang ở giai đoạn **pre-implementation**: `docs/` và `api-docs/` chứa đầy đủ spec, `src/` mới chỉ có khung thư mục (README mô tả ý định, chưa có code). Khi bắt đầu code, hãy đối chiếu với phase hiện tại trong [docs/07-roadmap/phases-overview.md](docs/07-roadmap/phases-overview.md) trước — không implement vượt phạm vi của phase đang làm.
+Phase 1 (MVP) đã được implement trong `src/` theo [docs/07-roadmap/phases-overview.md](docs/07-roadmap/phases-overview.md). Trước khi mở rộng phạm vi, kiểm tra phase hiện tại tại đó và trong domain spec liên quan (`docs/02-domains/<domain>/spec.md`) — không implement vượt phạm vi của phase đang làm.
 
 ## Nguồn sự thật (source of truth)
 
@@ -12,6 +12,10 @@ Repo đang ở giai đoạn **pre-implementation**: `docs/` và `api-docs/` ch�
 - **Schema dữ liệu**: `docs/03-data/` (PostgreSQL DDL, MongoDB document shape, Redis key pattern)
 - **Hợp đồng API**: `api-docs/openapi/<service>.yaml` — đây là interface chính thức giữa các service và giữa backend/frontend. Khi implement handler, tuân theo path/schema đã định nghĩa; nếu cần đổi hợp đồng, sửa file OpenAPI trước rồi mới sửa code.
 - **Bảo mật & phân quyền**: `docs/04-security/` — đặc biệt lưu ý mục authorization: kiểm tra quyền theo **role** là chưa đủ, còn phải kiểm tra **ownership** (vd: organizer chỉ thao tác được trên sự kiện do chính mình tạo).
+
+## Thêm màn hình / component UI mới
+
+Mọi việc liên quan tới UI/frontend (thêm màn hình mới, thêm component, sửa layout...) phải đọc trước [docs/06-frontend/screens/README.md](docs/06-frontend/screens/README.md) và [docs/06-frontend/components/README.md](docs/06-frontend/components/README.md) — hai file này có quy trình chi tiết (checklist từng bước) phải tuân theo. Nguyên tắc quan trọng nhất, áp dụng cụ thể nguồn sự thật ở mục trên cho phần UI: **rà soát `docs/06-frontend/components/` trước khi mô tả hoặc implement bất kỳ thành phần giao diện nào** — nếu Header/Button/Input/Card... đã có định nghĩa dùng chung, chỉ tham chiếu (tên + variant), không tự vẽ/định nghĩa lại theo cách khác. Token màu/spacing/typography luôn lấy từ [docs/06-frontend/design-system.md](docs/06-frontend/design-system.md); quy tắc hành vi (loading/toast/modal/validate form/pagination) luôn lấy từ [docs/06-frontend/interaction-patterns.md](docs/06-frontend/interaction-patterns.md).
 
 ## Quy ước khi sửa đổi
 

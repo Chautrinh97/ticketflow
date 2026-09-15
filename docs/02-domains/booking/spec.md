@@ -13,31 +13,45 @@ Bảng `orders`, `order_items`, `tickets` — xem [../../03-data/postgres-schema
 ## Luồng đặt vé (booking flow) — nơi thể hiện ACID + locking
 
 ```
-1. Client gửi POST /bookings { ticket_type_id, quantity }
+1. Client gửi POST /bookings { items: [{ ticket_type_id, quantity }, ...] }
+   -- 1 đơn hàng có thể gồm nhiều loại vé (vd: 2 VIP + 3 Standard) trong
+   -- cùng 1 lần gửi, khớp luồng chọn vé nhiều dòng ở
+   -- docs/06-frontend/screens/user/checkout.md.
 2. API Gateway: xác thực JWT → kiểm tra rate limit (Redis token bucket)
    → nếu vượt hạn mức: trả 429 Too Many Requests
-3. Booking Service: acquire Redis distributed lock theo ticket_type_id
-   (chặn bớt tải trước khi chạm DB, đặc biệt lúc flash-sale — không thay thế bước 4)
-4. Trong 1 PostgreSQL transaction:
-     SELECT quota, sold_count FROM ticket_types WHERE id = ? FOR UPDATE;
-     -- kiểm tra quota - sold_count >= quantity, nếu không đủ → rollback, trả lỗi
-     UPDATE ticket_types SET sold_count = sold_count + quantity WHERE id = ?;
+3. Booking Service: acquire Redis distributed lock cho từng ticket_type_id
+   riêng biệt trong items (chặn bớt tải trước khi chạm DB, đặc biệt lúc
+   flash-sale — không thay thế bước 5)
+4. Precheck: tra event_id sở hữu mỗi ticket_type_id, gọi gRPC GetEvent sang
+   Event Service kiểm tra event.status = 'published' — nếu không, từ chối
+   đặt vé (chặn đặt vé cho sự kiện draft/cancelled).
+5. Trong 1 PostgreSQL transaction:
+     Khoá từng ticket_type_id duy nhất trong items bằng một câu lệnh
+     SELECT price, quota, sold_count FROM ticket_types WHERE id = ? FOR UPDATE
+     riêng biệt cho mỗi id, theo thứ tự id tăng dần (bắt buộc — đây là cơ chế
+     duy nhất đảm bảo không deadlock giữa các đơn hàng đa loại vé chạm nhau;
+     không gộp thành 1 câu WHERE id = ANY(...) ORDER BY ... FOR UPDATE, vì
+     thứ tự khoá thực tế phụ thuộc cách Postgres quét dữ liệu, không phải
+     ORDER BY của kết quả trả về).
+     Kiểm tra quota - sold_count >= quantity cho từng dòng; nếu bất kỳ dòng
+     nào không đủ → rollback toàn bộ đơn hàng (all-or-nothing), trả lỗi.
+     UPDATE ticket_types SET sold_count = sold_count + quantity WHERE id = ?; -- mỗi dòng trong items
      INSERT INTO orders (status='pending', expires_at = now() + interval '15 minutes');
-     INSERT INTO order_items (...);
+     INSERT INTO order_items (...); -- 1 dòng mỗi ticket_type_id duy nhất
    COMMIT;
    -- Atomicity + Isolation đảm bảo không bán vượt quota dù nhiều request song song
-5. Release Redis lock
-6. Publish "order.created" (Phase 1-2: gọi trực tiếp Payment Service; Phase 4: qua message queue)
-7. Payment Service tạo phiên thanh toán → trả payment URL cho client
-8. Người dùng thanh toán → Payment Gateway gọi webhook
+6. Release Redis lock(s)
+7. Publish "order.created" (Phase 1-2: gọi trực tiếp Payment Service; Phase 4: qua message queue)
+8. Payment Service tạo phiên thanh toán → trả payment URL cho client
+9. Người dùng thanh toán → Payment Gateway gọi webhook
    → Payment Service xác thực chữ ký, cập nhật payments.status
    → phát "payment.success" hoặc "payment.failed"
-9. Nếu "payment.success": Booking Service cập nhật orders.status='paid'
-   → sinh tickets (mã QR) → phát "ticket.issued"
-10. Nếu "payment.failed" HOẶC cron job phát hiện order pending quá hạn:
+10. Nếu "payment.success": Booking Service cập nhật orders.status='paid'
+    → sinh tickets (mã QR) → phát "ticket.issued"
+11. Nếu "payment.failed" HOẶC cron job phát hiện order pending quá hạn:
     compensating transaction → UPDATE ticket_types SET sold_count = sold_count - quantity
-    → orders.status='expired'/'cancelled' (hoàn lại vé vào kho)
-11. Notification Service nhận "ticket.issued" / "order.cancelled" → gửi email + push + ghi notifications
+    (cho từng dòng order_items) → orders.status='expired'/'cancelled' (hoàn lại vé vào kho)
+12. Notification Service nhận "ticket.issued" / "order.cancelled" → gửi email + push + ghi notifications
 ```
 
 ### Vì sao cần cả Redis lock lẫn `SELECT ... FOR UPDATE`
@@ -61,7 +75,7 @@ Mỗi phút, tìm `orders` có `status='pending'` và `expires_at < now()` → t
 
 ## API liên quan
 
-Xem [../../../api-docs/openapi/booking-service.yaml](../../../api-docs/openapi/booking-service.yaml).
+Xem [../../../api-docs/openapi/booking-service.yaml](../../../api-docs/openapi/booking-service.yaml) — bao gồm cả nhóm endpoint `organizer`/`admin` tổng hợp từ dữ liệu `orders`/`payments` mà Booking Service sở hữu: `GET /organizer/events/{eventId}/buyers` (danh sách người mua vé), `GET /organizer/stats`, `GET /organizer/events/{id}/stats`, `GET /admin/stats` — chi tiết ý nghĩa nghiệp vụ xem [../analytics/spec.md](../analytics/spec.md).
 
 ## Phân theo phase
 

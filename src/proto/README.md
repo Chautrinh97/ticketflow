@@ -1,10 +1,13 @@
 # Proto
 
-**Trạng thái:** chưa có định nghĩa `.proto` — placeholder scaffold.
+**Trạng thái:** Phase 1 — `identity.proto`, `event.proto`, `booking.proto` đã định nghĩa và generate.
 
-Định nghĩa gRPC dùng chung giữa các service (giao tiếp nội bộ service-to-service). Sẽ được bổ sung khi bắt đầu Phase 1 implementation, đồng bộ với các RPC method mô tả gián tiếp qua giao tiếp giữa các domain trong [../../docs/01-architecture/system-architecture.md](../../docs/01-architecture/system-architecture.md).
+Định nghĩa gRPC dùng cho giao tiếp **nội bộ service-to-service** (không phải hợp đồng public — hợp đồng public là `api-docs/openapi/*.yaml`, do chính mỗi service phục vụ qua REST). Mỗi service vẫn chạy REST server riêng khớp OpenAPI của nó; gRPC chỉ dùng cho các lời gọi nội bộ mà REST không phù hợp (vd: kiểm tra session còn hiệu lực, xác nhận thanh toán xuyên service).
 
-## Quy ước dự kiến
+Không có `payment.proto` — trong Phase 1 không service nào gọi payment-service qua gRPC (payment-service chỉ là caller vào booking-service và là REST responder cho gateway/webhook).
 
-- Một file `.proto` theo tên service (vd: `identity.proto`, `event.proto`, `booking.proto`).
-- Message request/response nên phản ánh đúng field đã định nghĩa trong `components.schemas` của OpenAPI tương ứng tại [../../api-docs/openapi/](../../api-docs/openapi/), tránh định nghĩa hai shape dữ liệu lệch nhau cho cùng một khái niệm (vd: `User`, `Event`, `Order`).
+## Quy ước
+
+- Một file `.proto` theo tên service, `option go_package = "ticketflow/proto/<name>pb;<name>pb"`.
+- Message request/response phản ánh đúng field trong OpenAPI tương ứng khi khái niệm trùng nhau (vd: `Order`, `Event`), nhưng chỉ chứa field mà bên gọi nội bộ thực sự cần — không copy nguyên schema OpenAPI.
+- Regenerate code: `scripts/gen-proto.sh` (yêu cầu `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc` trong `$PATH`). Output nằm ở `<name>pb/` (vd: `identitypb/`), tách thư mục theo package vì mỗi proto khai báo package Go khác nhau.

@@ -4,12 +4,12 @@ Triển khai bằng **Kubernetes CronJob** — mỗi job là một container ri�
 
 ## Danh sách job
 
-| Job | Lịch chạy | Việc làm | Thuộc domain |
-|---|---|---|---|
-| Huỷ đơn hàng quá hạn | Mỗi 1 phút | Tìm `orders` có `status='pending'` và `expires_at < now()` → hoàn `sold_count` trong `ticket_types`, cập nhật `orders.status='expired'` | [../02-domains/booking/spec.md](../02-domains/booking/spec.md) |
-| Nhắc lịch sự kiện | Mỗi giờ | Tìm sự kiện diễn ra trong 24h tới → publish `event.reminder` | [../02-domains/notification/spec.md](../02-domains/notification/spec.md) |
-| Báo cáo doanh thu ngày | 0h hằng ngày | Tổng hợp doanh thu theo organizer, lưu snapshot | [../02-domains/analytics/spec.md](../02-domains/analytics/spec.md) |
-| Đồng bộ Elasticsearch *(nice-to-have)* | Theo CDC hoặc mỗi 5 phút | Đồng bộ thay đổi từ Postgres/Mongo sang index tìm kiếm | [../02-domains/search/spec.md](../02-domains/search/spec.md) |
+| Job | Lịch chạy | Việc làm | Thuộc domain | Phase |
+|---|---|---|---|---|
+| Huỷ đơn hàng quá hạn | Mỗi 1 phút | Tìm `orders` có `status='pending'` và `expires_at < now()` → hoàn `sold_count` trong `ticket_types`, cập nhật `orders.status='expired'` | [../02-domains/booking/spec.md](../02-domains/booking/spec.md) | 2 |
+| Nhắc lịch sự kiện | Mỗi giờ | Tìm sự kiện diễn ra trong 24h tới → publish `event.reminder` | [../02-domains/notification/spec.md](../02-domains/notification/spec.md) | 2 (cần Notification Service) |
+| Báo cáo doanh thu ngày | 0h hằng ngày | Tổng hợp doanh thu theo organizer, lưu snapshot | [../02-domains/analytics/spec.md](../02-domains/analytics/spec.md) | 2 (cần Analytics) |
+| Đồng bộ Elasticsearch *(nice-to-have)* | Theo CDC hoặc mỗi 5 phút | Đồng bộ thay đổi từ Postgres/Mongo sang index tìm kiếm | [../02-domains/search/spec.md](../02-domains/search/spec.md) | 2+ (nice-to-have) |
 
 ## Job quan trọng nhất: huỷ đơn hàng quá hạn
 
