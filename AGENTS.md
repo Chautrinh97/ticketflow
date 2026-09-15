@@ -12,6 +12,8 @@ Phase 1 (MVP) đã được implement trong `src/` theo [docs/07-roadmap/phases-
 - **Schema dữ liệu**: `docs/03-data/` (PostgreSQL DDL, MongoDB document shape, Redis key pattern)
 - **Hợp đồng API**: `api-docs/openapi/<service>.yaml` — đây là interface chính thức giữa các service và giữa backend/frontend. Khi implement handler, tuân theo path/schema đã định nghĩa; nếu cần đổi hợp đồng, sửa file OpenAPI trước rồi mới sửa code.
 - **Bảo mật & phân quyền**: `docs/04-security/` — đặc biệt lưu ý mục authorization: kiểm tra quyền theo **role** là chưa đủ, còn phải kiểm tra **ownership** (vd: organizer chỉ thao tác được trên sự kiện do chính mình tạo).
+- **Quy ước OpenAPI**: [docs/01-architecture/api-conventions.md](docs/01-architecture/api-conventions.md) — style bắt buộc (auth scheme, schema lỗi chung, phân trang, đặt tên path/field) cho mọi file dưới `api-docs/openapi/`.
+- **Quy ước backend Go**: [docs/01-architecture/backend-conventions.md](docs/01-architecture/backend-conventions.md) — cách dùng `src/pkg/` (`apperr`, `httpauth`, `authclaims`, `grpcinterceptor`, `pagination`) và quy ước test bắt buộc cho luồng transactional.
 
 ## Thêm màn hình / component UI mới
 

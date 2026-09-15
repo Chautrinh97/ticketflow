@@ -34,6 +34,14 @@ Tổng quan kỹ thuật frontend TicketFlow. Đặc tả chi tiết từng màn
 
 Chi tiết luồng auth đầy đủ xem [../04-security/authentication.md](../04-security/authentication.md).
 
+## Quy ước code (API client, hooks, schema)
+
+- **Gọi API**: mọi hàm gọi API đi qua `apiFetch<T>(path, options)` trong `lib/api/client.ts` — không tự dùng `fetch` thô trong component/hook. `apiFetch` tự đính kèm bearer token, tự retry 1 lần sau khi refresh khi gặp 401, và tự redirect `/login` nếu refresh cũng thất bại; lỗi ném ra có dạng `ApiError{status,code,message}` (khớp shape `{code,message}` của `apperr` phía backend, cộng thêm `status`).
+- Mỗi domain có 1 file `lib/api/<domain>.ts` (vd `events.ts`, `bookings.ts`) chứa các hàm gọi endpoint của domain đó; hàm list dùng chung helper `toQuery(params)` để build query string, tham số list luôn có `page`/`page_size` khớp `PageParam`/`PageSizeParam` phía OpenAPI (xem [../01-architecture/api-conventions.md](../01-architecture/api-conventions.md)).
+- **Schema validate**: mỗi domain có 1 file `lib/schemas/<domain>.schema.ts` (Zod) — field/kiểu dữ liệu phải khớp đúng request/response schema trong `api-docs/openapi/<service>.yaml` tương ứng, không tự định nghĩa validation khác biệt (nhắc lại từ mục "Chi tiết kỹ thuật" ở trên).
+- **Data fetching phía client**: mỗi domain cần cache/refetch có 1 hook riêng trong `lib/hooks/` (vd `useEvents.ts`, `useMyBookings.ts`) bọc quanh TanStack Query, gọi hàm tương ứng trong `lib/api/`.
+- **Token**: đọc/ghi access token qua `tokenStore` (`lib/auth/tokenStore.ts`) — không tự ý đọc/ghi biến toàn cục hay `localStorage`/`sessionStorage` ở nơi khác (xem mục Auth ở trên).
+
 ## CORS & ảnh
 
 - CORS: API Gateway chỉ định đúng domain frontend được phép gọi kèm `credentials: true` (bắt buộc vì cookie refresh token là cross-origin nếu frontend và API khác domain/subdomain).
