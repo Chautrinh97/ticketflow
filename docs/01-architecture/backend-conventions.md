@@ -29,13 +29,51 @@
 
 ## Testing
 
+### Công cụ chuẩn
+
+Thêm vào `go.mod` bằng `go get` khi **lần đầu thực sự cần** — không thêm trước khi có test nào dùng tới (đúng tinh thần "không thêm code/dependency phòng hờ" ở AGENTS.md):
+
+- `github.com/stretchr/testify` (`assert`/`require`/`suite`/`mock`) — assertion + cấu trúc test chuẩn cho mọi test từ nay.
+- `github.com/testcontainers/testcontainers-go` (+ module `.../modules/postgres`) — tự spin container Postgres thật cho integration test, thay vì giả định docker-compose Postgres đã chạy sẵn.
+- `github.com/golang-migrate/migrate/v4` (+ driver `database/postgres`, source `source/file`) — chạy đúng file `migrations/*.up.sql` thật của service lên container test, thay vì hand-copy schema trong code test.
+- `github.com/vektra/mockery/v2` — dev-tool CLI generate mock từ interface (không phải runtime dependency của service).
+- `github.com/go-redis/redismock/v9` — mock client `go-redis` (khớp bản `go-redis/v9` đã có sẵn) để test logic dùng Redis mà không cần Redis thật.
+
+### Cấu trúc test
+
+- 1 file test cho 1 file nguồn, cùng package (white-box) — vd `booking_repository.go` ↔ `booking_repository_test.go`.
+- 1 `testify.Suite` (`<X>TestSuite`) cho mỗi file test; mỗi hàm/method public cần test có 1 test method chạy suite đó.
+- Mỗi tình huống là 1 sub-test qua `s.Run(caseName, func() {...})`; `caseName` khai báo `const` ở đầu file, tiền tố `[Success]`/`[Error]` mô tả rõ kỳ vọng (vd `testCaseError_CreateOrder_InsufficientStock = "[Error] Từ chối khi không đủ tồn kho"`) — tên hằng đóng vai trò tài liệu sống.
+- Assertion qua `s.Require()`/`s.Assert()` (testify suite-embedded), không so sánh tay + `t.Fatalf`.
+- Không dùng `t.Parallel()` cho test dùng chung 1 container/DB trong cùng package — tránh nhiễu giữa các sub-test không phải là race đang được kiểm thử.
+
+### Integration test (cần Postgres thật)
+
+Chuẩn mới cho **test viết mới** — test hiện có (`booking_repository_concurrency_test.go`) giữ nguyên như hiện tại, không bắt buộc migrate ngược sang cách này:
+
+1. `TestMain(m *testing.M)` cấp package: dùng `testcontainers-go` khởi 1 container Postgres **1 lần cho cả package**, lưu connection string/pool vào biến package-level dùng chung cho mọi suite trong file đó.
+2. Áp schema bằng cách chạy thật `migrations/*.up.sql` của chính service qua `golang-migrate/migrate/v4` (driver `postgres` trỏ connection string container + `source/file` trỏ thư mục `migrations/`) — không hand-copy `CREATE TABLE` trong code test nữa, tránh lệch với migration thật theo thời gian.
+3. Container không khởi được (không có Docker daemon khả dụng) → log cảnh báo và `os.Exit(0)` ngay trong `TestMain`, coi như skip toàn bộ package — giữ đúng tinh thần "graceful skip" của `t.Skipf` cũ, để môi trường/CI thiếu Docker không bị fail cứng.
+4. Dọn container (`container.Terminate(ctx)`) sau `m.Run()`.
+5. Seed dữ liệu ban đầu qua helper viết tay (`newTestX`/`seedX`, mẫu `seedTicketType` hiện có) — không cần fixture/golden file ở quy mô repo hiện tại.
+6. Giữa các sub-test dùng chung DB: dọn bảng liên quan (`TRUNCATE ... CASCADE`) trong `TearDownTest`/`TearDownSubTest` của suite, để case sau không bị ảnh hưởng bởi case trước.
+7. Test race-condition (N goroutine + channel `start` + `sync/atomic` + assert invariant, đúng mẫu `booking_repository_concurrency_test.go`) viết y hệt cách hiện tại — chỉ đổi nguồn lấy pool (container thay vì `TEST_DATABASE_URL`).
+
+### Unit test có mock (service phụ thuộc gRPC client/Redis)
+
+Áp dụng khi muốn test logic ở `service` tách biệt khỏi DB/gRPC/Redis thật.
+
+**Điều kiện cần trước khi mock được**: dependency muốn mock phải là **interface**, không phải struct cụ thể. Hiện tại constructor các `service` (vd `NewBookingService(repo *repository.BookingRepository, locker *lock.TicketTypeLocker, eventCl *eventclient.Client)`) nhận thẳng struct cụ thể — mockery chỉ generate được mock từ interface. Muốn unit-test 1 service với dependency nào đó, **trước tiên** định nghĩa 1 interface hẹp ngay tại package `service` (nơi tiêu thụ, đúng idiom Go "accept interfaces, return structs"), chỉ khai đúng method thực sự dùng tới (vd `type EventChecker interface { GetEvent(ctx context.Context, eventID string) (*eventclient.Event, error) }`), rồi đổi tham số constructor sang nhận interface đó — struct thật (`*eventclient.Client`, `*lock.TicketTypeLocker`) tự động implement, không cần sửa gì ở struct. Đây là thay đổi nhỏ ở code sản xuất, làm khi thực sự bắt đầu unit-test service đó, không làm hàng loạt trước khi cần.
+
+1. Cấu hình `mockery` (file `.mockery.yaml` ở `src/`, tạo khi lần đầu cần) trỏ tới interface vừa định nghĩa, output mock vào subpackage `mocks` cạnh nơi định nghĩa interface (vd `internal/service/mocks`).
+2. Dùng mock trong test: `mockEventCl := mocks.NewEventChecker(t)`; `.On("GetEvent", mock.Anything, eventID).Return(&eventclient.Event{...}, nil)`.
+3. Với `internal/lock` (bọc redsync qua `go-redis`): dùng `redismock.NewClientMock()` tạo `*redis.Client` giả, truyền thẳng vào `lock.NewTicketTypeLocker(client)` (constructor đã nhận đúng `*redis.Client`, không cần đổi gì vì `redismock` trả về đúng type thật, chỉ intercept ở tầng transport) — cuối test gọi `redisMock.ExpectationsWereMet()`.
+4. Assert lỗi nghiệp vụ: tiếp tục dùng `errors.As` + so `.Code` với biến `apperr` có sẵn (như test hiện tại) — **không** dùng `s.Require().ErrorIs(err, apperr.ErrConflict)`, vì `*apperr.Error` là con trỏ được `New`/`WithMessage` tạo mới mỗi lần, chưa có method `Is(target error) bool` so theo `Code` để `errors.Is` nhận diện đúng. Muốn dùng đúng idiom đó cần thêm method `Is` cho `apperr.Error` trước — việc riêng, ngoài phạm vi quy ước này.
+
+### Quy tắc chung
+
 - Với mọi luồng nghiệp vụ có tính transaction đụng tồn kho/số dư (đặt vé, thanh toán — nêu đích danh trong `AGENTS.md`): **bắt buộc** có test race-condition/concurrent-request trước khi coi là hoàn tất, không chỉ test happy-path (`AGENTS.md` mục "Kiểm tra trước khi coi một thay đổi là hoàn tất").
-- Viết theo đúng mẫu `booking-service/internal/repository/booking_repository_concurrency_test.go`:
-  - Đọc DSN từ `TEST_DATABASE_URL`, mặc định về DSN docker-compose local nếu biến trống.
-  - `t.Skipf(...)` (không `t.Fatalf`) khi không kết nối được Postgres — để `go build`/`go vet`/CI không có Postgres vẫn pass.
-  - Tự tạo schema tối thiểu cần dùng ngay trong test (`CREATE TABLE IF NOT EXISTS ...`) — không phụ thuộc migration runner đã chạy trước đó.
-  - N goroutine cùng chạy 1 hành động qua 1 channel `start` để khởi chạy đồng loạt, đếm kết quả bằng `sync/atomic`, rồi assert invariant nghiệp vụ (vd `sold_count` không bao giờ vượt `quota`) đúng bất kể thứ tự request tới.
-- Không thêm thư viện test/mocking mới (`testify`, `gomock`...) khi chưa có trong `go.mod` — dùng `testing` chuẩn + fake tự viết, khớp phong cách test hiện có.
+- Test logic thuần (validation, mapping lỗi sang `apperr`, tính toán) không chạm DB/gRPC/Redis: `testify/assert` bình thường, không cần suite/mock, chạy được ngay bằng `go test ./...` không cần Docker hay biến môi trường nào.
 
 ## Khi nào thêm code mới vào `src/pkg/`
 

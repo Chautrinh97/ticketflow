@@ -1,31 +1,23 @@
 ---
 name: go-test
-description: Write Go tests for a backend service, including the mandatory race-condition/concurrency test for transactional flows (booking, payment) required by AGENTS.md's completion checklist. Use when adding tests, or when a transactional flow (stock, balance, order state) has no concurrency coverage yet.
+description: Write Go tests for a backend service — integration tests against a real containerized Postgres, unit tests with testify/mockery/redismock mocks, or plain unit tests — including the mandatory race-condition/concurrency test for transactional flows (booking, payment) required by AGENTS.md's completion checklist. Use when adding tests, or when a transactional flow has no concurrency coverage yet.
 ---
 
 # go-test
 
-Viết test Go cho service dưới `src/services/<name>/`. Đọc mục "Testing" trong [docs/01-architecture/backend-conventions.md](../../../docs/01-architecture/backend-conventions.md) trước.
+Viết test Go cho service dưới `src/services/<name>/`. **Luôn đọc mục "Testing" trong [docs/01-architecture/backend-conventions.md](../../../docs/01-architecture/backend-conventions.md) trước** — đó là nơi chứa toàn bộ quy ước chi tiết (công cụ chuẩn, cấu trúc test, mẫu `TestMain`/testcontainers, cách mock từng loại dependency). File skill này chỉ mô tả quy trình áp dụng, không lặp lại cơ chế.
 
-## Quy tắc bắt buộc
+## Quy trình
 
-- Mọi luồng nghiệp vụ có tính transaction đụng tồn kho/số dư (đặt vé, thanh toán — nêu đích danh trong AGENTS.md) **phải** có test race-condition/concurrent-request, không chỉ test happy-path, trước khi coi thay đổi là hoàn tất (AGENTS.md mục "Kiểm tra trước khi coi một thay đổi là hoàn tất").
-- **Ưu tiên ngay**: `payment-service` hiện **chưa có test nào** dù được AGENTS.md nêu tên ngang hàng `booking` trong yêu cầu này — đây là vi phạm checklist đang tồn tại sẵn trong code, nếu người dùng yêu cầu chạy skill này mà không chỉ định service cụ thể, hỏi có muốn ưu tiên `payment-service` trước không.
+1. **Xác định loại test cần viết**:
+   - **Integration** (repository, hoặc luồng nghiệp vụ xuyên layer cần Postgres thật) → dùng đúng mẫu `TestMain` + testcontainers-go + golang-migrate ở `backend-conventions.md`.
+   - **Unit có mock** (`service` phụ thuộc gRPC client/Redis mà muốn cô lập khỏi dependency thật) → kiểm tra dependency cần mock đã là **interface** chưa. Chưa có thì định nghĩa interface hẹp tại package `service` + đổi constructor sang nhận interface đó **trước**, rồi mới generate mock bằng mockery (hoặc dùng `redismock` cho Redis, không cần đổi gì vì constructor `lock.NewTicketTypeLocker` đã nhận đúng `*redis.Client`).
+   - **Unit thuần** (validation, mapping lỗi, tính toán không chạm DB/gRPC/Redis) → `testify/assert` bình thường, chạy ngay bằng `go test ./...`, không cần Docker/biến môi trường.
+2. Dependency chưa có trong `go.mod` (testify/testcontainers-go/golang-migrate/mockery/redismock) → thêm bằng `go get` ngay trong lần viết test này — không thêm trước khi thực sự cần.
+3. Mọi luồng nghiệp vụ có tính transaction đụng tồn kho/số dư (đặt vé, thanh toán — nêu đích danh trong AGENTS.md) **phải** có test race-condition/concurrent-request, không chỉ happy-path, trước khi coi thay đổi là hoàn tất (AGENTS.md mục "Kiểm tra trước khi coi một thay đổi là hoàn tất").
+4. **Ưu tiên ngay**: `payment-service` hiện **chưa có test nào** dù được AGENTS.md nêu tên ngang hàng `booking` trong yêu cầu này — nếu người dùng gọi skill này không chỉ định service cụ thể, hỏi có muốn ưu tiên `payment-service` trước không.
+5. Sau khi thêm test, cập nhật dòng trạng thái test trong `README.md` của chính service đó (mirror cách `booking-service/README.md` tự báo cáo trạng thái).
 
-## Mẫu test concurrency (theo đúng `booking-service/internal/repository/booking_repository_concurrency_test.go`)
+## Lưu ý phạm vi
 
-1. `testPool(t)` helper: đọc DSN từ `TEST_DATABASE_URL`, mặc định về DSN docker-compose local; `t.Skipf(...)` (không `t.Fatalf`) khi không kết nối được Postgres — để `go build`/`go vet`/CI không có Postgres vẫn pass.
-2. `setupSchema(t, pool)` helper: tự `CREATE TABLE IF NOT EXISTS` tối thiểu subset schema cần dùng, mirror đúng migration thật — test tự chứa (self-contained), không phụ thuộc migration runner đã chạy trước.
-3. Seed dữ liệu ban đầu (helper riêng, vd `seedTicketType`) trả về id cần dùng.
-4. N goroutine cùng gọi 1 hành động, đồng bộ khởi chạy bằng 1 channel `start` (`<-start` trong mỗi goroutine, `close(start)` sau khi spawn hết) để tối đa hoá khả năng race thật xảy ra, đếm kết quả bằng `sync/atomic` (thành công/conflict/lỗi khác).
-5. Assert: tổng số thành công đúng bằng giới hạn tài nguyên (vd `quota`), tổng conflict đúng bằng phần còn lại, **0 lỗi khác** loại conflict, và đọc lại state cuối cùng trong DB (vd `sold_count`) để xác nhận invariant giữ đúng — không chỉ tin vào giá trị trả về của lời gọi.
-6. Dùng `errors.As` + so `Code` với biến `apperr` có sẵn (vd `apperr.ErrConflict.Code`) để phân loại lỗi conflict vs lỗi khác — không so message string.
-
-## Test không cần DB (unit test thường)
-
-- Logic validation, mapping lỗi sang `apperr`, và business rule không chạm DB thật thì viết table-driven test chuẩn `testing`, chạy được bằng `go test ./...` không cần biến môi trường nào.
-- Không thêm `testify`/`gomock` hay thư viện test/mocking mới khi `go.mod` chưa có — dùng `testing` chuẩn + fake tự viết, khớp phong cách hiện có trong repo.
-
-## Sau khi thêm test
-
-Cập nhật dòng trạng thái test trong `README.md` của chính service đó (mirror cách `booking-service/README.md` tự báo cáo trạng thái) để người đọc sau không phải tự đi tìm file test.
+`booking-service/internal/repository/booking_repository_concurrency_test.go` hiện có **không** theo convention mới (dùng `TEST_DATABASE_URL` thủ công + hand-copy schema) — đây là test hợp lệ, không cần migrate lại; convention mới ở `backend-conventions.md` chỉ áp dụng cho test viết mới từ nay.
