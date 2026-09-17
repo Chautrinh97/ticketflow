@@ -21,3 +21,13 @@ Implement code Go dưới `src/services/<name>/`. **Luôn đọc trước** [doc
 10. **Đúng phạm vi phase**: kiểm tra `docs/07-roadmap/phase-N-*.md` — không viết code "phòng hờ" cho nice-to-have chưa tới phase (AGENTS.md quy ước #5).
 11. **Migration**: file `migrations/*.up.sql`/`*.down.sql` khớp cột-với-cột với `docs/03-data/postgres-schema.md` (hoặc mongodb-schema.md).
 12. Sau khi implement xong luồng transactional (đặt vé, thanh toán, hoặc luồng tương tự đụng tồn kho/số dư): chuyển sang skill `go-test` để viết race-condition test bắt buộc — chưa có test này thì chưa coi là hoàn tất.
+
+## Checklist bổ sung — mối quan tâm Phase 2
+
+Áp dụng khi endpoint/luồng đang implement thuộc các nhóm sau (bỏ qua nếu không liên quan):
+
+13. **Redis cache-aside** (đọc chi tiết/danh sách sự kiện...): đọc [docs/03-data/redis-keys.md](../../../docs/03-data/redis-keys.md) trước để dùng đúng key pattern/TTL đã định nghĩa — không tự đặt key mới. Invalidate cache **ngay trong cùng transaction hoặc ngay sau khi ghi thành công** (không lệch cache), không dựa vào TTL để tự hết hạn thay cho invalidate chủ động khi organizer sửa/xoá resource.
+14. **Rate limit**: middleware token bucket chỉ đặt ở API Gateway theo [docs/04-security/rate-limiting.md](../../../docs/04-security/rate-limiting.md) — không tự thêm rate limit rải rác ở service nội bộ (service nội bộ tin tưởng traffic đã qua gateway).
+15. **Cron/background job**: tuân theo [docs/05-infra-devops/background-jobs.md](../../../docs/05-infra-devops/background-jobs.md) — chạy trong transaction cùng nguyên tắc `SELECT ... FOR UPDATE` như luồng đặt vé khi đụng tồn kho/số dư, và phải **idempotent** (chạy lại nhiều lần trên cùng bản ghi không gây lệch dữ liệu). Phase 2 chạy bằng scheduler trong-process trên docker-compose, chưa phải Kubernetes CronJob thật (xem file trên).
+16. **Presigned URL (file-service)**: tuân theo scope/whitelist/thời hạn hết hạn mô tả trong [docs/02-domains/file-storage/spec.md](../../../docs/02-domains/file-storage/spec.md) — không tạo URL không giới hạn thời gian hoặc không kiểm tra loại file.
+17. **Webhook (payment thật)**: bắt buộc xác thực chữ ký (HMAC/signature header) **trước khi** đọc payload, và kiểm tra idempotency theo `provider_txn_id` (đã tồn tại thì bỏ qua, không xử lý lại) theo [docs/02-domains/payment/spec.md](../../../docs/02-domains/payment/spec.md) — không tin bất kỳ webhook nào chưa qua bước xác thực chữ ký.

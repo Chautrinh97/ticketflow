@@ -45,7 +45,7 @@ paths:
   /events/search:
     get:
       tags: [public]
-      summary: Full-text + fuzzy search theo tên/địa điểm, xếp hạng theo độ liên quan
+      summary: Full-text + fuzzy search theo tên/địa điểm, xếp hạng theo độ liên quan (kết hợp filter category/city/date)
       security: []
       parameters:
         - name: q
@@ -53,6 +53,20 @@ paths:
           required: true
           schema:
             type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Chỉ lấy sự kiện có start_time từ thời điểm này
+          schema:
+            type: string
+            format: date-time
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
       responses:

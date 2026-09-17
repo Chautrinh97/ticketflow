@@ -88,6 +88,23 @@ CREATE TABLE tickets (
 
 `tickets` chỉ được tạo **sau khi thanh toán thành công** — trước đó chỉ có `orders`/`order_items` ở trạng thái `pending`. Chi tiết transaction/locking khi tạo đơn xem [../02-domains/booking/spec.md](../02-domains/booking/spec.md).
 
+### `organizer_revenue_daily_snapshots` (Phase 2)
+
+```sql
+CREATE TABLE organizer_revenue_daily_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organizer_id UUID NOT NULL REFERENCES users(id),
+    snapshot_date DATE NOT NULL,
+    total_revenue NUMERIC(14,2) NOT NULL DEFAULT 0,
+    total_orders INT NOT NULL DEFAULT 0,
+    tickets_sold INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (organizer_id, snapshot_date)
+);
+```
+
+Ghi bởi cron job "Báo cáo doanh thu ngày" ([../05-infra-devops/background-jobs.md](../05-infra-devops/background-jobs.md)) — mỗi organizer có tối đa một dòng snapshot/ngày (`UNIQUE (organizer_id, snapshot_date)`), job phải dùng `INSERT ... ON CONFLICT DO UPDATE` để chạy lại an toàn (idempotent) nếu job bị retry cùng ngày. Mục đích: tránh quét lại toàn bộ `orders`/`order_items` mỗi lần xem lịch sử doanh thu theo ngày — xem [../02-domains/analytics/spec.md](../02-domains/analytics/spec.md).
+
 ## Payment Service — `payments`
 
 ```sql

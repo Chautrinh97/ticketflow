@@ -16,7 +16,7 @@ Không cần service riêng — thống kê được tính bằng query tổng h
 - `GET /organizer/stats` (Booking Service — xem [../../../api-docs/openapi/booking-service.yaml](../../../api-docs/openapi/booking-service.yaml)) — tổng quan doanh thu/tỉ lệ bán vé của organizer hiện tại trên mọi sự kiện.
 - `GET /organizer/events/:id/stats` (Booking Service) — doanh thu, số vé đã bán/còn lại theo từng `ticket_type` của 1 sự kiện. Yêu cầu ownership check giống mọi endpoint organizer khác (xem [../../04-security/authorization.md](../../04-security/authorization.md)).
 - `GET /admin/stats` (Booking Service) — chỉ `super_admin`, số liệu toàn hệ thống.
-- **Báo cáo doanh thu ngày**: cron job 0h hằng ngày tổng hợp doanh thu theo organizer, lưu snapshot (bảng snapshot riêng, chưa định nghĩa schema chi tiết ở giai đoạn scaffold — xác định khi implement Phase 2) — xem [../../05-infra-devops/background-jobs.md](../../05-infra-devops/background-jobs.md). Mục đích snapshot: tránh phải quét lại toàn bộ `orders` mỗi lần muốn xem lịch sử doanh thu theo ngày.
+- **Báo cáo doanh thu ngày**: cron job 0h hằng ngày tổng hợp doanh thu theo organizer, lưu snapshot vào bảng `organizer_revenue_daily_snapshots` (schema: [../../03-data/postgres-schema.md](../../03-data/postgres-schema.md)) — xem [../../05-infra-devops/background-jobs.md](../../05-infra-devops/background-jobs.md). Mục đích snapshot: tránh phải quét lại toàn bộ `orders` mỗi lần muốn xem lịch sử doanh thu theo ngày.
 
 ## Giai đoạn Phase 4 — Analytics Service riêng (nice-to-have)
 

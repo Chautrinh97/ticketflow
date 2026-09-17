@@ -40,7 +40,7 @@ Khi ghi `event_catalog.attributes`, Event Service validate shape tối thiểu t
 | Fuzzy | Extension `pg_trgm` (`similarity()`) | Chấp nhận gõ sai chính tả (Phase 2) |
 | Elasticsearch | *(nice-to-have)* — xem [../search/spec.md](../search/spec.md) | Khi cần scale tìm kiếm độc lập với DB giao dịch (Phase 4) |
 
-`GET /events/search?q=` kết hợp full-text (ưu tiên) và fallback fuzzy nếu full-text không ra kết quả phù hợp.
+`GET /events/search?q=` kết hợp full-text (ưu tiên) và fallback fuzzy nếu full-text không ra kết quả phù hợp; hỗ trợ thêm các filter `category`/`city`/`from` giống `GET /events` để thu hẹp kết quả tìm kiếm.
 
 ## Quan hệ với domain khác
 

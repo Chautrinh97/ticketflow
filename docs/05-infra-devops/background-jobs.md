@@ -1,6 +1,8 @@
 # Background job / Cron job
 
-Triển khai bằng **Kubernetes CronJob** — mỗi job là một container riêng, có thể scale/monitor độc lập với service chính (không chạy cron trong cùng tiến trình với service phục vụ request).
+**Phase 2 (docker-compose):** mỗi job là một binary/container riêng chạy scheduler trong-process (vd: `robfig/cron` trong Go) bên trong `deployments/docker-compose.yaml`, không chạy cron lồng trong cùng tiến trình với service phục vụ request (service chính vẫn chỉ phục vụ HTTP/gRPC). Lý do: Kubernetes chưa triển khai tới Phase 3 (xem [deployment.md](deployment.md)), nên chưa thể dùng `CronJob` thật.
+
+**Phase 3+ (Kubernetes):** chuyển từng job trên thành một **Kubernetes CronJob** riêng, có thể scale/monitor độc lập với service chính — giữ nguyên logic nghiệp vụ, chỉ đổi cơ chế lập lịch.
 
 ## Danh sách job
 
