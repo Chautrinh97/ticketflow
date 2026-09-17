@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -12,11 +13,21 @@ import (
 	"ticketflow/services/event-service/internal/service"
 )
 
-type PublicEventHandler struct {
-	events *service.EventService
+// EventQueryService is the subset of *service.EventService that
+// PublicEventHandler actually calls — defined here (the consuming package)
+// so it can be mocked with mockery, per
+// docs/01-architecture/backend-conventions.md's mock convention.
+// *service.EventService satisfies this automatically.
+type EventQueryService interface {
+	ListPublished(ctx context.Context, filter repository.EventFilter, p pagination.Params) ([]repository.EventSummaryRow, int64, error)
+	GetDetailBySlug(ctx context.Context, slug string) (*service.EventDetail, error)
 }
 
-func NewPublicEventHandler(events *service.EventService) *PublicEventHandler {
+type PublicEventHandler struct {
+	events EventQueryService
+}
+
+func NewPublicEventHandler(events EventQueryService) *PublicEventHandler {
 	return &PublicEventHandler{events: events}
 }
 

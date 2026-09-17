@@ -9,14 +9,13 @@ import (
 	"ticketflow/pkg/httpauth"
 	"ticketflow/pkg/pagination"
 	"ticketflow/services/booking-service/internal/model"
-	"ticketflow/services/booking-service/internal/service"
 )
 
 type BookingHandler struct {
-	bookings *service.BookingService
+	bookings Bookings
 }
 
-func NewBookingHandler(bookings *service.BookingService) *BookingHandler {
+func NewBookingHandler(bookings Bookings) *BookingHandler {
 	return &BookingHandler{bookings: bookings}
 }
 

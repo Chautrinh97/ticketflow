@@ -15,11 +15,11 @@ import (
 const refreshCookieName = "refresh_token"
 
 type AuthHandler struct {
-	auth         *service.AuthService
+	auth         AuthService
 	cookieSecure bool
 }
 
-func NewAuthHandler(auth *service.AuthService, cookieSecure bool) *AuthHandler {
+func NewAuthHandler(auth AuthService, cookieSecure bool) *AuthHandler {
 	return &AuthHandler{auth: auth, cookieSecure: cookieSecure}
 }
 

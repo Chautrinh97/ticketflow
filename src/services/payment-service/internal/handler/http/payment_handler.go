@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,11 +10,22 @@ import (
 	"ticketflow/services/payment-service/internal/service"
 )
 
-type PaymentHandler struct {
-	payments *service.PaymentService
+// PaymentUseCase is the narrow slice of *service.PaymentService's methods
+// PaymentHandler actually calls, extracted here at the consuming package
+// per docs/01-architecture/backend-conventions.md's "Unit test có mock"
+// convention — mockery can only generate a mock from an interface, and
+// *service.PaymentService already implements this implicitly, so no
+// service-side change beyond what payment_service.go already needed.
+type PaymentUseCase interface {
+	Checkout(ctx context.Context, orderID, provider string) (*service.CheckoutResult, error)
+	HandleWebhook(ctx context.Context, orderID, status string) error
 }
 
-func NewPaymentHandler(payments *service.PaymentService) *PaymentHandler {
+type PaymentHandler struct {
+	payments PaymentUseCase
+}
+
+func NewPaymentHandler(payments PaymentUseCase) *PaymentHandler {
 	return &PaymentHandler{payments: payments}
 }
 

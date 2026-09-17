@@ -20,13 +20,13 @@ import (
 const RefreshTokenTTL = 7 * 24 * time.Hour
 
 type AuthService struct {
-	users     *repository.UserRepository
+	users     UserRepository
 	sessions  *repository.SessionRepository
 	verifier  firebase.Verifier
 	jwtSecret []byte
 }
 
-func NewAuthService(users *repository.UserRepository, sessions *repository.SessionRepository, verifier firebase.Verifier, jwtSecret []byte) *AuthService {
+func NewAuthService(users UserRepository, sessions *repository.SessionRepository, verifier firebase.Verifier, jwtSecret []byte) *AuthService {
 	return &AuthService{users: users, sessions: sessions, verifier: verifier, jwtSecret: jwtSecret}
 }
 

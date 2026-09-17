@@ -8,15 +8,14 @@ import (
 	"ticketflow/pkg/apperr"
 	"ticketflow/proto/bookingpb"
 	"ticketflow/services/booking-service/internal/model"
-	"ticketflow/services/booking-service/internal/service"
 )
 
 type BookingGRPCServer struct {
 	bookingpb.UnimplementedBookingServiceServer
-	bookings *service.BookingService
+	bookings Bookings
 }
 
-func NewBookingGRPCServer(bookings *service.BookingService) *BookingGRPCServer {
+func NewBookingGRPCServer(bookings Bookings) *BookingGRPCServer {
 	return &BookingGRPCServer{bookings: bookings}
 }
 

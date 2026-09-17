@@ -3,14 +3,24 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"ticketflow/pkg/authclaims"
-	"ticketflow/services/api-gateway/internal/identityclient"
 )
+
+// SessionChecker is the narrow subset of *identityclient.Client's API that
+// OptionalSessionCheck actually calls, extracted here (consumer-side, per
+// docs/01-architecture/backend-conventions.md's mock-via-interface-extraction
+// convention) so tests can substitute a mock instead of a real gRPC client.
+// *identityclient.Client already implements this method with the exact same
+// signature, so no change is needed there.
+type SessionChecker interface {
+	CheckSession(ctx context.Context, jti, userID string) (blacklisted bool, status string, err error)
+}
 
 // OptionalSessionCheck runs on every gateway route. When no bearer token is
 // present it simply forwards the request — each backend service enforces
@@ -21,7 +31,7 @@ import (
 // can answer: is this jti blacklisted (logged out) or the account now banned.
 // Backend services still locally re-verify the JWT themselves for
 // role/ownership checks — this middleware only gates on revocation/ban.
-func OptionalSessionCheck(secret []byte, identityCl *identityclient.Client) gin.HandlerFunc {
+func OptionalSessionCheck(secret []byte, identityCl SessionChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		const prefix = "Bearer "

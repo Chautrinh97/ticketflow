@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -9,14 +10,31 @@ import (
 	"ticketflow/pkg/apperr"
 	"ticketflow/pkg/httpauth"
 	"ticketflow/pkg/pagination"
+	"ticketflow/services/event-service/internal/model"
+	"ticketflow/services/event-service/internal/repository"
 	"ticketflow/services/event-service/internal/service"
 )
 
-type OrganizerEventHandler struct {
-	events *service.EventService
+// OrganizerEventService is the subset of *service.EventService that
+// OrganizerEventHandler actually calls — defined here (the consuming
+// package) so it can be mocked with mockery, per
+// docs/01-architecture/backend-conventions.md's mock convention.
+// *service.EventService satisfies this automatically.
+type OrganizerEventService interface {
+	ListByOrganizer(ctx context.Context, organizerID, status string, p pagination.Params) ([]repository.EventSummaryRow, int64, error)
+	Create(ctx context.Context, organizerID string, in service.CreateEventInput) (*service.EventDetail, error)
+	GetDetailByID(ctx context.Context, id string) (*service.EventDetail, error)
+	Update(ctx context.Context, id string, in service.UpdateEventInput) (*service.EventDetail, error)
+	Cancel(ctx context.Context, id string) error
+	Publish(ctx context.Context, id string) (*model.Event, error)
+	GetOwnerID(ctx context.Context, eventID string) (string, error)
 }
 
-func NewOrganizerEventHandler(events *service.EventService) *OrganizerEventHandler {
+type OrganizerEventHandler struct {
+	events OrganizerEventService
+}
+
+func NewOrganizerEventHandler(events OrganizerEventService) *OrganizerEventHandler {
 	return &OrganizerEventHandler{events: events}
 }
 

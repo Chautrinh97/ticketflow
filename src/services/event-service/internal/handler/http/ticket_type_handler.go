@@ -1,19 +1,30 @@
 package http
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"ticketflow/pkg/apperr"
+	"ticketflow/services/event-service/internal/model"
 	"ticketflow/services/event-service/internal/service"
 )
 
-type TicketTypeHandler struct {
-	ticketTypes *service.TicketTypeService
+// TicketTypeCreator is the subset of *service.TicketTypeService that
+// TicketTypeHandler actually calls — defined here (the consuming package)
+// so it can be mocked with mockery, per
+// docs/01-architecture/backend-conventions.md's mock convention.
+// *service.TicketTypeService satisfies this automatically.
+type TicketTypeCreator interface {
+	Create(ctx context.Context, eventID string, in service.CreateTicketTypeInput) (*model.TicketType, error)
 }
 
-func NewTicketTypeHandler(ticketTypes *service.TicketTypeService) *TicketTypeHandler {
+type TicketTypeHandler struct {
+	ticketTypes TicketTypeCreator
+}
+
+func NewTicketTypeHandler(ticketTypes TicketTypeCreator) *TicketTypeHandler {
 	return &TicketTypeHandler{ticketTypes: ticketTypes}
 }
 

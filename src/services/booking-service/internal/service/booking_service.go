@@ -5,19 +5,16 @@ import (
 
 	"ticketflow/pkg/apperr"
 	"ticketflow/pkg/pagination"
-	"ticketflow/services/booking-service/internal/eventclient"
-	"ticketflow/services/booking-service/internal/lock"
 	"ticketflow/services/booking-service/internal/model"
-	"ticketflow/services/booking-service/internal/repository"
 )
 
 type BookingService struct {
-	repo    *repository.BookingRepository
-	locker  *lock.TicketTypeLocker
-	eventCl *eventclient.Client
+	repo    Repository
+	locker  Locker
+	eventCl EventChecker
 }
 
-func NewBookingService(repo *repository.BookingRepository, locker *lock.TicketTypeLocker, eventCl *eventclient.Client) *BookingService {
+func NewBookingService(repo Repository, locker Locker, eventCl EventChecker) *BookingService {
 	return &BookingService{repo: repo, locker: locker, eventCl: eventCl}
 }
 

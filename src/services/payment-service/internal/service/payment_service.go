@@ -10,15 +10,35 @@ import (
 	"ticketflow/pkg/apperr"
 	"ticketflow/services/payment-service/internal/bookingclient"
 	"ticketflow/services/payment-service/internal/model"
-	"ticketflow/services/payment-service/internal/repository"
 )
 
-type PaymentService struct {
-	payments  *repository.PaymentRepository
-	bookingCl *bookingclient.Client
+// PaymentStore is the narrow slice of *repository.PaymentRepository's
+// methods PaymentService actually calls, extracted here at the consuming
+// package per docs/01-architecture/backend-conventions.md's "Unit test có
+// mock" convention — mockery can only generate a mock from an interface,
+// not a concrete struct, and *repository.PaymentRepository already
+// implements this implicitly, so no repository-side change is needed.
+type PaymentStore interface {
+	Create(ctx context.Context, p *model.Payment) error
+	UpdateStatus(ctx context.Context, id, status string, providerTxnID *string) error
+	GetLatestByOrderID(ctx context.Context, orderID string) (*model.Payment, error)
 }
 
-func NewPaymentService(payments *repository.PaymentRepository, bookingCl *bookingclient.Client) *PaymentService {
+// BookingClient is the narrow slice of *bookingclient.Client's methods
+// PaymentService actually calls, extracted for the same reason as
+// PaymentStore above.
+type BookingClient interface {
+	GetOrder(ctx context.Context, orderID string) (*bookingclient.Order, error)
+	ConfirmOrderPayment(ctx context.Context, orderID, paymentID string) (*bookingclient.ConfirmResult, error)
+	FailOrderPayment(ctx context.Context, orderID, paymentID, reason string) (*bookingclient.ConfirmResult, error)
+}
+
+type PaymentService struct {
+	payments  PaymentStore
+	bookingCl BookingClient
+}
+
+func NewPaymentService(payments PaymentStore, bookingCl BookingClient) *PaymentService {
 	return &PaymentService{payments: payments, bookingCl: bookingCl}
 }
 

@@ -18,13 +18,42 @@ import (
 	"ticketflow/services/event-service/internal/repository"
 )
 
-type EventService struct {
-	events      *repository.EventPostgresRepo
-	ticketTypes *repository.TicketTypePostgresRepo
-	catalog     *repository.EventCatalogMongoRepo
+// EventRepository is the subset of *repository.EventPostgresRepo that
+// EventService actually calls — defined here (the consuming package) so it
+// can be mocked with mockery per docs/01-architecture/backend-conventions.md's
+// "Unit test có mock" convention. *repository.EventPostgresRepo satisfies
+// this automatically, no change needed there.
+type EventRepository interface {
+	DB() *gorm.DB
+	CreateTx(tx *gorm.DB, e *model.Event) error
+	GetByID(ctx context.Context, id string) (*model.Event, error)
+	GetPublishedBySlug(ctx context.Context, slug string) (*model.Event, error)
+	Update(ctx context.Context, e *model.Event) error
+	SlugExists(ctx context.Context, slug string) (bool, error)
+	ListPublished(ctx context.Context, filter repository.EventFilter, p pagination.Params) ([]repository.EventSummaryRow, int64, error)
+	ListByOrganizer(ctx context.Context, organizerID, status string, p pagination.Params) ([]repository.EventSummaryRow, int64, error)
 }
 
-func NewEventService(events *repository.EventPostgresRepo, ticketTypes *repository.TicketTypePostgresRepo, catalog *repository.EventCatalogMongoRepo) *EventService {
+// TicketTypeRepository is the subset of *repository.TicketTypePostgresRepo
+// that EventService actually calls (assembling event detail).
+type TicketTypeRepository interface {
+	ListByEventID(ctx context.Context, eventID string) ([]model.TicketType, error)
+}
+
+// CatalogRepository is the subset of *repository.EventCatalogMongoRepo that
+// EventService actually calls.
+type CatalogRepository interface {
+	Upsert(ctx context.Context, doc *model.EventCatalog) error
+	GetByEventID(ctx context.Context, eventID string) (*model.EventCatalog, error)
+}
+
+type EventService struct {
+	events      EventRepository
+	ticketTypes TicketTypeRepository
+	catalog     CatalogRepository
+}
+
+func NewEventService(events EventRepository, ticketTypes TicketTypeRepository, catalog CatalogRepository) *EventService {
 	return &EventService{events: events, ticketTypes: ticketTypes, catalog: catalog}
 }
 

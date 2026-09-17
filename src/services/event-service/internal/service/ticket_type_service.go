@@ -9,15 +9,29 @@ import (
 
 	"ticketflow/pkg/apperr"
 	"ticketflow/services/event-service/internal/model"
-	"ticketflow/services/event-service/internal/repository"
 )
 
-type TicketTypeService struct {
-	events      *repository.EventPostgresRepo
-	ticketTypes *repository.TicketTypePostgresRepo
+// EventLookup is the subset of *repository.EventPostgresRepo that
+// TicketTypeService actually calls (existence check before creating a
+// ticket type) — defined here (the consuming package) per
+// docs/01-architecture/backend-conventions.md's mock convention.
+// *repository.EventPostgresRepo satisfies this automatically.
+type EventLookup interface {
+	GetByID(ctx context.Context, id string) (*model.Event, error)
 }
 
-func NewTicketTypeService(events *repository.EventPostgresRepo, ticketTypes *repository.TicketTypePostgresRepo) *TicketTypeService {
+// TicketTypeWriter is the subset of *repository.TicketTypePostgresRepo that
+// TicketTypeService actually calls.
+type TicketTypeWriter interface {
+	Create(ctx context.Context, tt *model.TicketType) error
+}
+
+type TicketTypeService struct {
+	events      EventLookup
+	ticketTypes TicketTypeWriter
+}
+
+func NewTicketTypeService(events EventLookup, ticketTypes TicketTypeWriter) *TicketTypeService {
 	return &TicketTypeService{events: events, ticketTypes: ticketTypes}
 }
 

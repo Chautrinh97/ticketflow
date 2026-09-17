@@ -8,14 +8,13 @@ import (
 
 	"ticketflow/pkg/apperr"
 	"ticketflow/services/identity-service/internal/model"
-	"ticketflow/services/identity-service/internal/repository"
 )
 
 type UserService struct {
-	users *repository.UserRepository
+	users UserRepository
 }
 
-func NewUserService(users *repository.UserRepository) *UserService {
+func NewUserService(users UserRepository) *UserService {
 	return &UserService{users: users}
 }
 
